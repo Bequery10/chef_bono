@@ -1,0 +1,20 @@
+CREATE TABLE recipes (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    ingredients TEXT NOT NULL,
+    preparation TEXT NOT NULL,
+    vegetarian BOOLEAN DEFAULT FALSE,
+    vegan BOOLEAN DEFAULT FALSE,
+    gluten_free BOOLEAN DEFAULT FALSE,
+    dairy_free BOOLEAN DEFAULT FALSE,
+    nut_free BOOLEAN DEFAULT FALSE,
+    high_fiber BOOLEAN DEFAULT FALSE,
+    weight_loss_diet BOOLEAN DEFAULT FALSE,
+    muscle_gain_bulking BOOLEAN DEFAULT FALSE,
+    balanced_healthy BOOLEAN DEFAULT FALSE,
+    carb_score FLOAT DEFAULT 0,
+    protein_score FLOAT DEFAULT 0,
+    fat_score FLOAT DEFAULT 0,
+    calorie_score FLOAT DEFAULT 0,
+    sugar_score FLOAT DEFAULT 0
+);
