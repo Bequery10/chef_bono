@@ -212,3 +212,5 @@ __marimo__/
 full_dataset.csv
 data_strings_local.json
 *.jpg
+*.jpeg
+*.png

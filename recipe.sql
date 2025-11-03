@@ -3,6 +3,9 @@ CREATE TABLE recipes (
     name VARCHAR(255) NOT NULL,
     ingredients TEXT NOT NULL,
     preparation TEXT NOT NULL,
+    nationality VARCHAR(100)
+    meal_type INTEGER CHECK (meal_type >= 1 AND meal_type <= 3),
+    main_ingredient VARCHAR(255),
     vegetarian BOOLEAN DEFAULT FALSE,
     vegan BOOLEAN DEFAULT FALSE,
     gluten_free BOOLEAN DEFAULT FALSE,
@@ -16,5 +19,8 @@ CREATE TABLE recipes (
     protein_score FLOAT DEFAULT 0,
     fat_score FLOAT DEFAULT 0,
     calorie_score FLOAT DEFAULT 0,
-    sugar_score FLOAT DEFAULT 0
+    sugar_score FLOAT DEFAULT 0,
+    preparation_time_score FLOAT DEFAULT 0,
+    preparation_difficulty_score FLOAT DEFAULT 0,
+
 );

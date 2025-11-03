@@ -78,6 +78,10 @@ class KitchenImageAnalyzer:
     def _get_response(self, prompt, config):
         """Get response from the model"""
         try:
+
+            print("Prompt:", prompt)
+            print("Config:", config)
+            print("Model:", self.model.name)
             response = self.client.models.generate_content(
                 model=self.model.name,
                 contents=prompt,
@@ -94,6 +98,9 @@ class KitchenImageAnalyzer:
 
     def analyze_kitchen_image(self, image_path, analysis_type="general"):
         """
+        say: hello world
+        print: say hello world
+
         Analyze kitchen supplies and food images
         """
         if not os.path.exists(image_path):
@@ -183,7 +190,7 @@ if __name__ == "__main__":
             choice = input("Choose option (1-3): ").strip()
 
             if choice == "1":
-                image_path = input("Enter image path: ").strip()
+                image_path = "current_frame.jpg"
                 analysis_type = (
                     input(
                         "Analysis type (general/inventory/expiration/organization): "

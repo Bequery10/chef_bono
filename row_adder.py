@@ -15,6 +15,8 @@ def _save_to_database(recipes):
             name TEXT NOT NULL,
             ingredients TEXT NOT NULL,
             preparation TEXT NOT NULL,
+            meal_type INTEGER CHECK (meal_type >= 1 AND meal_type <= 3),
+            main_ingredient TEXT,
             vegetarian BOOLEAN DEFAULT FALSE,
             vegan BOOLEAN DEFAULT FALSE,
             gluten_free BOOLEAN DEFAULT FALSE,
@@ -37,15 +39,18 @@ def _save_to_database(recipes):
             """
             INSERT INTO recipes (
                 name, ingredients, preparation,
+                meal_type, main_ingredient,
                 vegetarian, vegan, gluten_free, dairy_free, nut_free,
                 high_fiber, weight_loss_diet, muscle_gain_bulking, balanced_healthy,
                 carb_score, protein_score, fat_score, calorie_score, sugar_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 recipe["name"],
                 recipe["ingredients"],
                 recipe["preparation"],
+                recipe["meal_type"],
+                recipe["main_ingredient"],
                 recipe["vegetarian"],
                 recipe["vegan"],
                 recipe["gluten_free"],
@@ -110,11 +115,37 @@ if __name__ == "__main__":
         recipe_data = _scrap_html(response.text)
         recipes.append(recipe_data)
 
+    # Add flags to each recipe dict
     flags = flag_adder._add_flags(recipes)
     recipes_with_flags = []
     for recipe, flag in zip(recipes, flags):
         recipe_with_flags = {**recipe, **flag}
-        if None not in recipe_with_flags.values():
+        # Ensure all required fields are present and not None
+        required_fields = [
+            "name",
+            "ingredients",
+            "preparation",
+            "meal_type",
+            "main_ingredient",
+            "vegetarian",
+            "vegan",
+            "gluten_free",
+            "dairy_free",
+            "nut_free",
+            "high_fiber",
+            "weight_loss_diet",
+            "muscle_gain_bulking",
+            "balanced_healthy",
+            "carb_score",
+            "protein_score",
+            "fat_score",
+            "calorie_score",
+            "sugar_score",
+        ]
+        if all(
+            field in recipe_with_flags and recipe_with_flags[field] is not None
+            for field in required_fields
+        ):
             recipes_with_flags.append(recipe_with_flags)
 
     _save_to_database(recipes_with_flags)

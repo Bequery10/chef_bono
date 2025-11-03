@@ -20,6 +20,12 @@ class Chat:
         self.started = False
 
     def _update_chat_history(self, prompt, output):
+
+        if not self._is_list_of_parts(prompt):
+            prompt = [types.Part.from_text(text=prompt)]
+        if not self._is_list_of_parts(output):
+            output = [types.Part.from_text(text=output)]
+
         self.chat_history.append(("user", prompt))
         self.chat_history.append(("assistant", output))
 
@@ -31,11 +37,10 @@ class Chat:
         self.chat_history.pop()
         self.chat_history.pop()
 
-    def _get_chat_history(self):
-        convo_text = ""
-        for role, text in self.chat_history:
-            convo_text += f"{role}: {text}\n"
-        return convo_text
+    def _is_list_of_parts(self, obj):
+        return isinstance(obj, list) and all(
+            isinstance(item, types.Part) for item in obj
+        )
 
 
 class AIUtils:
@@ -77,16 +82,45 @@ class AIUtils:
     def _get_time(self):  # get the time since the timer started
         return time.time() - self.start_time
 
-    def _get_token_count(self, text):  # get the token count of a given text
+    def _estimate_image_token_cost(self, image_data, mime_type):
+        # You need to know the image size (width, height)
+        from PIL import Image
+        import io
+
+        try:
+            img = Image.open(io.BytesIO(image_data))
+            width, height = img.size
+            if width <= 384 and height <= 384:
+                return 258
+            # For larger images, estimate tiles (each 768x768)
+            tiles_w = (width + 767) // 768
+            tiles_h = (height + 767) // 768
+            return tiles_w * tiles_h * 258
+        except Exception:
+            # Fallback: assume 258 tokens
+            return 258
+
+    def _get_token_count(self, prompt):
+        text = ""
+        image_token_cost = 0
+        for part in prompt:
+            if hasattr(part, "text") and part.text:
+                text += part.text + " "
+            elif hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
+                # Estimate image token cost
+                image_token_cost += self._estimate_image_token_cost(
+                    part.inline_data.data, part.inline_data.mime_type
+                )
+        # Count text tokens as before
         try:
             token_text = str(
                 self.client.models.count_tokens(model=self.model.name, contents=text)
             ).split(" ")
             index = token_text[0].index("=") + 1
             token = int(token_text[0][index:])
-            return token
+            return token + image_token_cost
         except Exception as e:
-            return 0
+            return image_token_cost
 
     def _check_for_exceptions(
         self, prompt
@@ -187,6 +221,9 @@ class AIUtils:
             if self.start_time == 0:
                 self._start_timer()
 
+            # print("Prompt:", prompt)
+            # print("Config:", config)
+            # print("Model:", self.model.name)
             response = self.client.models.generate_content(
                 model=self.model.name,
                 contents=prompt,
@@ -207,6 +244,7 @@ class AIUtils:
         return response
 
     def _check_context_window_limit(self, prompt, chat):
+
         total_tokens = self._get_token_count(prompt) + chat.output_token_limit
 
         if total_tokens > chat.context_window_limit:
@@ -224,6 +262,54 @@ class AIUtils:
                 chat._get_chat_history() + prompt + instruction
             )
 
+    def _ask_and_check(
+        self,
+        prompt,
+        chat,
+        build_type=None,
+        temperature=0.7,
+        top_p=0.9,
+        top_k=40,
+        generic_parameter=None,
+    ):
+
+        score = 0
+        attempt = 0
+        response = None
+
+        while score < 0.7 and attempt < 3:
+            new_response = self._ask(
+                prompt=prompt,
+                chat=chat,
+                build_type=build_type,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                generic_parameter=generic_parameter,
+            )
+
+            if new_response is None:
+                print("No response from AI.")
+                return None
+
+            chat_history = []
+            for role, parts in chat.chat_history:
+                chat_history.extend(parts)
+
+            new_score, feed_back = self._agent_check(
+                previous_instruction=prompt,
+                chat_history=chat_history,
+                outputs=types.Part.from_text(new_response),
+            )
+
+            if new_score > score:
+                score = new_score
+                response = new_response
+
+            attempt += 1
+            print(score)
+        return response
+
     def _ask(
         self,
         prompt,
@@ -234,8 +320,8 @@ class AIUtils:
         top_k=40,
         generic_parameter=None,
     ):
+
         instruction, schema = self._get_build(
-            prompt=prompt,
             build_type=build_type,
             generic_parameter=generic_parameter,
         )
@@ -253,19 +339,22 @@ class AIUtils:
             top_k=top_k,
         )
 
-        full_prompt = f"user: {prompt}\nchat_history: {chat._get_chat_history()}/"
+        prompt_parts = []
+        for role, parts in chat.chat_history:
+            prompt_parts.extend(parts)
 
-        exceed = self._check_context_window_limit(full_prompt + instruction, chat)
+        prompt_parts.extend(prompt)
+
+        exceed = self._check_context_window_limit(prompt_parts, chat)
 
         try:
             if not exceed:
-                response = self._get_response(full_prompt, config)
+
+                response = self._get_response(prompt_parts, config)
             else:
                 self._shrink_chat_history(chat, prompt, instruction)
-                full_prompt = (
-                    f"user: {prompt}\nchat_history: {chat._get_chat_history()}/"
-                )
-                response = self._get_response(full_prompt, config)
+
+                response = self._get_response(prompt_parts, config)
 
         except Exception as e:
             print(e)
@@ -273,12 +362,13 @@ class AIUtils:
 
         if response and hasattr(response, "parsed"):
 
-            chat._update_chat_history(prompt, response.parsed)
+            chat._update_chat_history(
+                prompt, [types.Part.from_text(text="\n".join(response.parsed))]
+            )
             return response.parsed
 
     def _get_build(
         self,
-        prompt,
         build_type,
         generic_parameter=None,
     ):
@@ -353,7 +443,10 @@ class AIUtils:
         elif build_type == "add_flags":
             instruction = """
             You are an expert AI that provide values for the categories based on the recipes provided.
-            Analyze the recipes and for each provide an array of values of the boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score'.
+            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'preparation_time_score', 'preparation_difficulty_score'.
+            Use the following guidelines to determine the values:
+            For the integer category 'meal_type', provide 1 for breakfast, 2 for lunch, and 3 for dinner.
+            For the string category 'main_ingredient', provide the primary ingredient used in the recipe. Make sure ingredient name is convential and straightforward like "chicken", "meat", "cucumber", "potato". For 'nationality', provide the cuisine type like "Italian", "Chinese", "Mexican", etc, if possible. If not possible, provide "Unknown". 
             For boolean categories, provide 'true' if the recipe fits the category, otherwise provide 'false'.
             For float categories, provide a score between 0 and 1 indicating how well the recipe provides the category.
             Provide the output in a JSON array format where each element corresponds to a recipe with the specified properties.
@@ -364,6 +457,13 @@ class AIUtils:
                 "items": {
                     "type": "object",
                     "properties": {
+                        "meal_type": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 3,
+                        },
+                        "main_ingredient": {"type": "string"},
+                        "nationality": {"type": "string"},
                         "vegetarian": {"type": "boolean"},
                         "vegan": {"type": "boolean"},
                         "gluten_free": {"type": "boolean"},
@@ -378,8 +478,13 @@ class AIUtils:
                         "fat_score": {"type": "number"},
                         "calorie_score": {"type": "number"},
                         "sugar_score": {"type": "number"},
+                        "preparation_time_score": {"type": "number"},
+                        "preparation_difficulty_score": {"type": "number"},
                     },
                     "required": [
+                        "meal_type",
+                        "main_ingredient",
+                        "nationality",
                         "vegetarian",
                         "vegan",
                         "gluten_free",
@@ -394,9 +499,14 @@ class AIUtils:
                         "fat_score",
                         "calorie_score",
                         "sugar_score",
+                        "preparation_time_score",
+                        "preparation_difficulty_score",
                     ],
                 },
             }
+
+        # elif build_type == "infer_user_intent":++
+
         return instruction, schema
 
     def _start(self):
@@ -406,15 +516,21 @@ class AIUtils:
     def _agent_check(
         self,
         previous_instruction,
-        chat,
+        chat_history,
         outputs,
     ):
 
-        customized_prompt = f"""
-        The system instruction for the earliest: {previous_instruction}
-        The chat history: {chat.chat_history}
-        The outputs that are produced based on the earliest response: {outputs}
-        """
+        customized_prompt = []
+        string1 = "The system instruction for the earliest:"
+        string2 = "The chat history:"
+        string3 = "The outputs that are produced based on the earliest response:"
+        customized_prompt.extend(types.Part.from_text(text=string1))
+        customized_prompt.extend(previous_instruction)
+        customized_prompt.extend(types.Part.from_text(text=string2))
+        customized_prompt.extend(chat_history)
+        customized_prompt.extend(types.Part.from_text(text=string3))
+        customized_prompt.extend(outputs)
+
         response = self._ask(
             prompt=customized_prompt,
             chat=self._get_new_chat(),
@@ -438,13 +554,50 @@ class AIUtils:
         )
 
     def _add_flags(self, prompt):
+
         response = self._ask(
-            prompt=prompt,
+            prompt=[types.Part.from_text(text=prompt)],
             chat=self._get_new_chat(),
             build_type="add_flags",
         )
-
         return response
+
+    def _analyze_kitchen_image(self, analysis_focus):
+        """Analyzes a kitchen image based on the provided focus."""
+
+        response = self._ask(
+            prompt=self._image_to_text(),
+            chat=self._get_new_chat(),
+            build_type="kitchen_image_analysis",
+            generic_parameter=analysis_focus,
+        )
+
+        print("Kitchen Image Analysis Result:")
+        print(json.dumps(response, indent=2))
+
+    def _image_to_text(self):
+
+        image_path = "current_frame.jpg"
+
+        mime_type = "image/jpeg"
+        if image_path.lower().endswith(".png"):
+            mime_type = "image/png"
+        elif image_path.lower().endswith(".webp"):
+            mime_type = "image/webp"
+
+        try:
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+        except Exception as e:
+            print(f"Error reading image file: {e}")
+            return None
+
+        prompt = [
+            types.Part.from_text(text="Analyze this kitchen image:"),
+            types.Part.from_bytes(data=image_data, mime_type=mime_type),
+        ]
+
+        return prompt
 
     def ask_ai(self):
         return None
