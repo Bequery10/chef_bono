@@ -3,6 +3,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import sqlite3
+import random
 
 
 def _save_to_database(recipes):
@@ -56,6 +57,7 @@ def _scrap_html(html_content):
     name_tag = soup.find("p", class_="H2")
     recipe_name = name_tag.get_text(strip=True) if name_tag else None
 
+    print(f"Scraping recipe: {recipe_name}")
     # Extract ingredients
     ingredients_table = soup.find("span", string="ingredients")
     ingredients = None
@@ -85,7 +87,7 @@ if __name__ == "__main__":
     for i in range(10):
 
         response = requests.get(
-            f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,10000000)}"
+            f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,1000000)}"
         )
         if response.status_code != 200:
             print("Failed to retrieve the webpage.")
