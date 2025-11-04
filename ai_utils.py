@@ -299,7 +299,7 @@ class AIUtils:
             new_score, feed_back = self._agent_check(
                 previous_instruction=prompt,
                 chat_history=chat_history,
-                outputs=types.Part.from_text(new_response),
+                outputs=chat_history[-1] if chat_history else None,
             )
 
             if new_score > score:
@@ -307,7 +307,7 @@ class AIUtils:
                 response = new_response
 
             attempt += 1
-            print(score)
+            print(str(score) + "------------")
         return response
 
     def _ask(
