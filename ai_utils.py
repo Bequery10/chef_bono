@@ -542,11 +542,11 @@ class AIUtils:
         string1 = "The system instruction for the earliest:"
         string2 = "The chat history:"
         string3 = "The outputs that are produced based on the earliest response:"
-        customized_prompt.extend(types.Part.from_text(text=string1))
+        customized_prompt.extend(self.to_gemini_text(text=string1))
         customized_prompt.extend(previous_instruction)
-        customized_prompt.extend(types.Part.from_text(text=string2))
+        customized_prompt.extend(self._to_gemini_text(text=string2))
         customized_prompt.extend(chat_history)
-        customized_prompt.extend(types.Part.from_text(text=string3))
+        customized_prompt.extend(self.to_gemini_text(text=string3))
         customized_prompt.extend(outputs)
 
         response = self._ask(
@@ -585,8 +585,12 @@ class AIUtils:
     def _analyze_kitchen_image(self, analysis_focus):
         """Analyzes a kitchen image based on the provided focus."""
 
+        prompt = []
+        prompt.append(self.to_gemini_text("Analyze this kitchen image:"))
+        prompt.append(self.to_gemini_image("current_frame.jpg"))
+
         response = self._ask(
-            prompt=self._image_to_text(),
+            prompt=prompt,
             chat=self._get_new_chat(),
             build_type="kitchen_image_analysis",
             generic_parameter=analysis_focus,
@@ -594,30 +598,6 @@ class AIUtils:
 
         print("Kitchen Image Analysis Result:")
         print(json.dumps(response, indent=2))
-
-    def _image_to_text(self):
-
-        image_path = "current_frame.jpg"
-
-        mime_type = "image/jpeg"
-        if image_path.lower().endswith(".png"):
-            mime_type = "image/png"
-        elif image_path.lower().endswith(".webp"):
-            mime_type = "image/webp"
-
-        try:
-            with open(image_path, "rb") as f:
-                image_data = f.read()
-        except Exception as e:
-            print(f"Error reading image file: {e}")
-            return None
-
-        prompt = [
-            types.Part.from_text(text="Analyze this kitchen image:"),
-            types.Part.from_bytes(data=image_data, mime_type=mime_type),
-        ]
-
-        return prompt
 
     def ask_ai(self):
         return None
