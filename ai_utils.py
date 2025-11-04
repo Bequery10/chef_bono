@@ -362,9 +362,7 @@ class AIUtils:
 
         if response and hasattr(response, "parsed"):
 
-            chat._update_chat_history(
-                prompt, [types.Part.from_text(text="\n".join(response.parsed))]
-            )
+            chat._update_chat_history(prompt, [self.to_gemini_text(response.parsed)])
             return response.parsed
 
     def _get_build(
@@ -441,6 +439,7 @@ class AIUtils:
             }
 
         elif build_type == "add_flags":
+
             instruction = """
             You are an expert AI that provide values for the categories based on the recipes provided.
             Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'preparation_time_score', 'preparation_difficulty_score'.
@@ -505,8 +504,27 @@ class AIUtils:
                 },
             }
 
-        # elif build_type == "infer_user_intent":++
+        elif build_type == "query":
+            instruction = f"""
+                You are an expert AI that writes sql query to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
+                The sqllite3 database structure: {sqlite3.connect(generic_parameter).cursor().execute("PRAGMA table_info(recipes)").fetchall()}
+                Consider the given database structure when generating a query.
+            """
 
+            schema = {
+                "type": "object",
+                "properties": {
+                    "sql_query": {
+                        "type": "string",
+                    },
+                },
+                "required": ["sql_query"],
+            }
+
+        elif build_type == "get_user_intent":
+            instruction = f"""
+                What is 
+            """
         return instruction, schema
 
     def _start(self):
@@ -555,8 +573,10 @@ class AIUtils:
 
     def _add_flags(self, prompt):
 
+        gemini_prompt = [self.to_gemini_text(prompt)]
+
         response = self._ask(
-            prompt=[types.Part.from_text(text=prompt)],
+            prompt=gemini_prompt,
             chat=self._get_new_chat(),
             build_type="add_flags",
         )
@@ -601,3 +621,41 @@ class AIUtils:
 
     def ask_ai(self):
         return None
+
+    def to_gemini_text(self, obj):
+        """
+        Converts any Python object to a string suitable for types.Part.from_text.
+        - dict/list: JSON string
+        - str: as is
+        - int/float/bool/None: str()
+        """
+        import json
+
+        string = ""
+        if isinstance(obj, (dict, list)):
+            string = json.dumps(obj, ensure_ascii=False)
+        elif isinstance(obj, str):
+            string = obj
+        elif obj is None:
+            string = ""
+
+        return types.Part.from_text(text=string)
+
+    def to_gemini_image(self, image_path):
+        """Converts an image file to types.Part with appropriate mime type."""
+        import os
+
+        mime_type = "image/jpeg"
+        if image_path.lower().endswith(".png"):
+            mime_type = "image/png"
+        elif image_path.lower().endswith(".webp"):
+            mime_type = "image/webp"
+
+        try:
+            with open(image_path, "rb") as f:
+                image_data = f.read()
+        except Exception as e:
+            print(f"Error reading image file: {e}")
+            return None
+
+        return types.Part.from_bytes(data=image_data, mime_type=mime_type)

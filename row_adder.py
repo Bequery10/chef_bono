@@ -8,42 +8,17 @@ import sqlite3
 def _save_to_database(recipes):
     conn = sqlite3.connect("recipes.db")
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS recipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            ingredients TEXT NOT NULL,
-            preparation TEXT NOT NULL,
-            meal_type INTEGER CHECK (meal_type >= 1 AND meal_type <= 3),
-            main_ingredient TEXT,
-            vegetarian BOOLEAN DEFAULT FALSE,
-            vegan BOOLEAN DEFAULT FALSE,
-            gluten_free BOOLEAN DEFAULT FALSE,
-            dairy_free BOOLEAN DEFAULT FALSE,
-            nut_free BOOLEAN DEFAULT FALSE,
-            high_fiber BOOLEAN DEFAULT FALSE,
-            weight_loss_diet BOOLEAN DEFAULT FALSE,
-            muscle_gain_bulking BOOLEAN DEFAULT FALSE,
-            balanced_healthy BOOLEAN DEFAULT FALSE,
-            carb_score FLOAT DEFAULT 0,
-            protein_score FLOAT DEFAULT 0,
-            fat_score FLOAT DEFAULT 0,
-            calorie_score FLOAT DEFAULT 0,
-            sugar_score FLOAT DEFAULT 0
-        )
-    """
-    )
     for recipe in recipes:
         cursor.execute(
             """
             INSERT INTO recipes (
                 name, ingredients, preparation,
-                meal_type, main_ingredient,
+                meal_type, main_ingredient, nationality,
                 vegetarian, vegan, gluten_free, dairy_free, nut_free,
                 high_fiber, weight_loss_diet, muscle_gain_bulking, balanced_healthy,
-                carb_score, protein_score, fat_score, calorie_score, sugar_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                carb_score, protein_score, fat_score, calorie_score, sugar_score,
+                preparation_time_score, preparation_difficulty_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 recipe["name"],
@@ -51,6 +26,7 @@ def _save_to_database(recipes):
                 recipe["preparation"],
                 recipe["meal_type"],
                 recipe["main_ingredient"],
+                recipe["nationality"],
                 recipe["vegetarian"],
                 recipe["vegan"],
                 recipe["gluten_free"],
@@ -65,6 +41,8 @@ def _save_to_database(recipes):
                 recipe["fat_score"],
                 recipe["calorie_score"],
                 recipe["sugar_score"],
+                recipe["preparation_time_score"],
+                recipe["preparation_difficulty_score"],
             ),
         )
     conn.commit()
@@ -104,10 +82,11 @@ if __name__ == "__main__":
     recipes = []
     flag_adder = ai_utils.AIUtils("gemini-2.0-flash")
 
-    for i in range(1, 12):
-        if i == 2:
-            continue
-        response = requests.get(f"https://cookbooks.com/Recipe-Details.aspx?id={i}")
+    for i in range(10):
+
+        response = requests.get(
+            f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,10000000)}"
+        )
         if response.status_code != 200:
             print("Failed to retrieve the webpage.")
             exit()
@@ -118,6 +97,7 @@ if __name__ == "__main__":
     # Add flags to each recipe dict
     flags = flag_adder._add_flags(recipes)
     recipes_with_flags = []
+
     for recipe, flag in zip(recipes, flags):
         recipe_with_flags = {**recipe, **flag}
         # Ensure all required fields are present and not None
@@ -127,6 +107,7 @@ if __name__ == "__main__":
             "preparation",
             "meal_type",
             "main_ingredient",
+            "nationality",
             "vegetarian",
             "vegan",
             "gluten_free",
@@ -141,6 +122,8 @@ if __name__ == "__main__":
             "fat_score",
             "calorie_score",
             "sugar_score",
+            "preparation_time_score",
+            "preparation_difficulty_score",
         ]
         if all(
             field in recipe_with_flags and recipe_with_flags[field] is not None

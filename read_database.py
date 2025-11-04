@@ -1,4 +1,5 @@
 import sqlite3
+import json
 
 
 def read_recipes():
@@ -16,4 +17,4 @@ def read_recipes():
 if __name__ == "__main__":
     recipes = read_recipes()
     for recipe in recipes:
-        print(recipe)
+        print(json.dumps(recipe, indent=2, ensure_ascii=False))
