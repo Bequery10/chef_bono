@@ -7,6 +7,7 @@ import threading
 import os
 import re
 import sqlite3
+import pprint
 
 
 class Chat:
@@ -321,6 +322,7 @@ class AIUtils:
         generic_parameter=None,
     ):
 
+        print("Asking AI...")
         instruction, schema = self._get_build(
             build_type=build_type,
             generic_parameter=generic_parameter,
@@ -505,11 +507,24 @@ class AIUtils:
             }
 
         elif build_type == "query":
-            instruction = f"""
-                You are an expert AI that writes sql query to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
-                The sqllite3 database structure: {sqlite3.connect(generic_parameter).cursor().execute("PRAGMA table_info(recipes)").fetchall()}
-                Consider the given database structure when generating a query.
-            """
+
+            table_sql = None
+            with sqlite3.connect(generic_parameter) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='recipes';"
+                )
+                result = cursor.fetchone()
+                if result:
+                    table_sql = result[0]
+
+                instruction = f"""
+                    You are an expert AI that writes sql query to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
+                    The sqllite3 database's "recipes" table's structure: {table_sql}
+                    Consider the given database structure when generating a query.
+                """
+
+                pprint.pprint(table_sql)
 
             schema = {
                 "type": "object",
@@ -601,6 +616,25 @@ class AIUtils:
 
     def ask_ai(self):
         return None
+
+    def generate_sql_query(self, user_input, db_path):
+        """Generates an SQL query based on user input and database structure."""
+
+        prompt = []
+        prompt.append(self.to_gemini_text(user_input))
+
+        response = self._ask(
+            prompt=prompt,
+            chat=self._get_new_chat(),
+            build_type="query",
+            generic_parameter=db_path,
+        )
+
+        if response and "sql_query" in response:
+            return response["sql_query"]
+        else:
+            print("Failed to generate SQL query.")
+            return None
 
     def to_gemini_text(self, obj):
         """
