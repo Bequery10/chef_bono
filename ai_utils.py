@@ -542,11 +542,11 @@ class AIUtils:
         string1 = "The system instruction for the earliest:"
         string2 = "The chat history:"
         string3 = "The outputs that are produced based on the earliest response:"
-        customized_prompt.extend(self.to_gemini_text(text=string1))
+        customized_prompt.append(self.to_gemini_text(text=string1))
         customized_prompt.extend(previous_instruction)
-        customized_prompt.extend(self._to_gemini_text(text=string2))
+        customized_prompt.append(self._to_gemini_text(text=string2))
         customized_prompt.extend(chat_history)
-        customized_prompt.extend(self.to_gemini_text(text=string3))
+        customized_prompt.append(self.to_gemini_text(text=string3))
         customized_prompt.extend(outputs)
 
         response = self._ask(
