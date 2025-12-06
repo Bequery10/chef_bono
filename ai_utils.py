@@ -540,6 +540,7 @@ class AIUtils:
             instruction = f"""
                 What is 
             """
+
         return instruction, schema
 
     def _start(self):

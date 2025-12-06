@@ -1,2 +1,2 @@
-def play_sound():
+def play_sound(text):
     return None
