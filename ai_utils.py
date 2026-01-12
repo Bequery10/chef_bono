@@ -46,7 +46,7 @@ class Chat:
 
 class AIUtils:
 
-    def __init__(self, model_name="gemini-2.0-flash"):
+    def __init__(self, model_name="gemini-2.5-flash-lite"):
 
         self.client, self.model = self._init_gemini(model_name)
         self.input_token_limit = self.model.input_token_limit
@@ -523,8 +523,6 @@ class AIUtils:
                     The sqllite3 database's "recipes" table's structure: {table_sql}
                     Consider the given database structure when generating a query.
                 """
-
-                pprint.pprint(table_sql)
 
             schema = {
                 "type": "object",

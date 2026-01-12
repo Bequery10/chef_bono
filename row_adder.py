@@ -82,9 +82,9 @@ def _scrap_html(html_content):
 if __name__ == "__main__":
 
     recipes = []
-    flag_adder = ai_utils.AIUtils("gemini-2.0-flash")
+    flag_adder = ai_utils.AIUtils("gemini-2.5-flash")
 
-    for i in range(10):
+    for i in range(5):
 
         response = requests.get(
             f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,1000000)}"
