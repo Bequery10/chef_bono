@@ -1,0 +1,36 @@
+Pasta +
+Pizza +
+Rice dish +
+Noodle
+Burger
+Sandwich
+Wrap
+Taco
+Kebab
+Steak
+Grilled meat
+Fried chicken
+Seafood
+Curry
+Stew
+Casserole
+Salad
+Soup
+Bowl
+Fries
+Potato dish
+Bread
+Egg dish
+Pancake / waffle
+Dumplings
+Rolls
+Finger food
+Pastry
+Cake
+Cookie
+Ice cream
+Syrup dessert
+Coffee
+Tea
+Soft drink
+Smoothie / shake
