@@ -84,7 +84,7 @@ class BasicInterface:
 
     def on_exit(self):
         print("Exit pressed")
-        self.root.quit()
+        self.root.quit()=
 
     def run(self):
         self.root.mainloop()

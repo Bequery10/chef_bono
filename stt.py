@@ -43,6 +43,7 @@ def get_text(audio_file_path):
         import json
 
         text = str(json.loads(result).get("text", ""))
+        os.system("cls" if os.name == "nt" else "clear")
 
         print("Transcription:", text)
         if text.strip().lower() == "start":

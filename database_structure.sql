@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS recipes;
 CREATE TABLE recipes (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -21,5 +22,45 @@ CREATE TABLE recipes (
     calorie_score FLOAT DEFAULT 0,
     sugar_score FLOAT DEFAULT 0,
     preparation_time_score FLOAT DEFAULT 0,
-    preparation_difficulty_score FLOAT DEFAULT 0
+    preparation_difficulty_score FLOAT DEFAULT 0,
+    meal_class TEXT CHECK (
+        meal_class IN (
+            'Pasta',
+            'Pizza',
+            'Rice dish',
+            'Noodle',
+            'Burger',
+            'Sandwich',
+            'Wrap',
+            'Taco',
+            'Kebab',
+            'Steak',
+            'Grilled meat',
+            'Fried chicken',
+            'Seafood',
+            'Curry',
+            'Stew',
+            'Casserole',
+            'Salad',
+            'Soup',
+            'Bowl',
+            'Fries',
+            'Potato dish',
+            'Bread',
+            'Egg dish',
+            'Pancake / waffle',
+            'Dumplings',
+            'Rolls',
+            'Finger food',
+            'Pastry',
+            'Cake',
+            'Cookie',
+            'Ice cream',
+            'Syrup dessert',
+            'Coffee',
+            'Tea',
+            'Soft drink',
+            'Smoothie / shake'
+        )
+    )
 );

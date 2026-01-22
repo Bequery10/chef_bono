@@ -18,8 +18,8 @@ def _save_to_database(recipes):
                 vegetarian, vegan, gluten_free, dairy_free, nut_free,
                 high_fiber, weight_loss_diet, muscle_gain_bulking, balanced_healthy,
                 carb_score, protein_score, fat_score, calorie_score, sugar_score,
-                preparation_time_score, preparation_difficulty_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                preparation_time_score, preparation_difficulty_score, meal_class
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 recipe["name"],
@@ -44,6 +44,7 @@ def _save_to_database(recipes):
                 recipe["sugar_score"],
                 recipe["preparation_time_score"],
                 recipe["preparation_difficulty_score"],
+                recipe["meal_class"],
             ),
         )
     conn.commit()
@@ -79,6 +80,10 @@ def _scrap_html(html_content):
     return {"name": recipe_name, "ingredients": ingredients, "preparation": preparation}
 
 
+def _recipe_categorizer(recipes):
+    pass
+
+
 if __name__ == "__main__":
 
     recipes = []
@@ -102,7 +107,10 @@ if __name__ == "__main__":
 
     for recipe, flag in zip(recipes, flags):
         recipe_with_flags = {**recipe, **flag}
-        # Ensure all required fields are present and not None
+        # Add categorizes field, e.g. from flag or your own logic
+        # Here, as an example, we use main_ingredient as categorizes if it matches, else set to "Unknown"
+        # You should replace this logic with your actual category assignment
+        recipe_with_flags["categorizes"] = flag.get("main_ingredient", "Unknown")
         required_fields = [
             "name",
             "ingredients",
@@ -126,6 +134,7 @@ if __name__ == "__main__":
             "sugar_score",
             "preparation_time_score",
             "preparation_difficulty_score",
+            "meal_class",
         ]
         if all(
             field in recipe_with_flags and recipe_with_flags[field] is not None

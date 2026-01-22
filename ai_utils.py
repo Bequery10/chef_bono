@@ -48,7 +48,7 @@ class AIUtils:
 
     def __init__(self, model_name="gemini-2.5-flash-lite"):
 
-        self.client, self.model = self._init_gemini(model_name)
+        self.client, self.model = self._init_gemini(model_name, 0)
         self.input_token_limit = self.model.input_token_limit
         self.output_token_limit = self.model.output_token_limit
         self.context_window_limit = self.input_token_limit + self.output_token_limit
@@ -61,9 +61,9 @@ class AIUtils:
             self.context_window_limit,
         )
 
-    def _init_gemini(self, name):
+    def _init_gemini(self, name, key_index=0):
         load_dotenv()
-        API_KEY = os.getenv("GOOGLE_API_KEY")
+        API_KEY = os.getenv("GOOGLE_API_KEY" + str(key_index))
 
         client = genai.Client(api_key=API_KEY)
         model_name = name
@@ -215,17 +215,14 @@ class AIUtils:
 
         return generate_content_config
 
-    def _get_response(self, prompt, config):
+    def _get_response(self, prompt, config, client):
 
         try:
 
             if self.start_time == 0:
                 self._start_timer()
 
-            # print("Prompt:", prompt)
-            # print("Config:", config)
-            # print("Model:", self.model.name)
-            response = self.client.models.generate_content(
+            response = client.models.generate_content(
                 model=self.model.name,
                 contents=prompt,
                 config=config,
@@ -320,7 +317,10 @@ class AIUtils:
         top_p=0.9,
         top_k=40,
         generic_parameter=None,
+        client=None,
     ):
+        if client is None:
+            client = self.client
 
         print("Asking AI...")
         instruction, schema = self._get_build(
@@ -352,12 +352,11 @@ class AIUtils:
         try:
             if not exceed:
 
-                response = self._get_response(prompt_parts, config)
+                response = self._get_response(prompt_parts, config, client)
             else:
                 self._shrink_chat_history(chat, prompt, instruction)
 
-                response = self._get_response(prompt_parts, config)
-
+                response = self._get_response(prompt_parts, config, client)
         except Exception as e:
             print(e)
             return None
@@ -442,17 +441,57 @@ class AIUtils:
 
         elif build_type == "add_flags":
 
-            instruction = """
+            meal_classes = [
+                "Pasta",
+                "Pizza",
+                "Rice dish",
+                "Noodle",
+                "Burger",
+                "Sandwich",
+                "Wrap",
+                "Taco",
+                "Kebab",
+                "Steak",
+                "Grilled meat",
+                "Fried chicken",
+                "Seafood",
+                "Curry",
+                "Stew",
+                "Casserole",
+                "Salad",
+                "Soup",
+                "Bowl",
+                "Fries",
+                "Potato dish",
+                "Bread",
+                "Egg dish",
+                "Pancake / waffle",
+                "Dumplings",
+                "Rolls",
+                "Finger food",
+                "Pastry",
+                "Cake",
+                "Cookie",
+                "Ice cream",
+                "Syrup dessert",
+                "Coffee",
+                "Tea",
+                "Soft drink",
+                "Smoothie / shake",
+            ]
+            instruction = f"""
             You are an expert AI that provide values for the categories based on the recipes provided.
-            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'preparation_time_score', 'preparation_difficulty_score'.
+            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
             Use the following guidelines to determine the values:
             For the integer category 'meal_type', provide 1 for breakfast, 2 for lunch, and 3 for dinner.
             For the string category 'main_ingredient', provide the primary ingredient used in the recipe. Make sure ingredient name is convential and straightforward like "chicken", "meat", "cucumber", "potato". For 'nationality', provide the cuisine type like "Italian", "Chinese", "Mexican", etc, if possible. If not possible, provide "Unknown". 
             For boolean categories, provide 'true' if the recipe fits the category, otherwise provide 'false'.
             For float categories, provide a score between 0 and 1 indicating how well the recipe provides the category.
+            For the enum category 'meal_class', choose only one from the following list that best fits the recipe: {meal_classes}
             Provide the output in a JSON array format where each element corresponds to a recipe with the specified properties.
             Make sure the array's elements are in the same order as the input recipes.
             """
+
             schema = {
                 "type": "array",
                 "items": {
@@ -481,6 +520,10 @@ class AIUtils:
                         "sugar_score": {"type": "number"},
                         "preparation_time_score": {"type": "number"},
                         "preparation_difficulty_score": {"type": "number"},
+                        "meal_class": {
+                            "type": "string",
+                            "enum": meal_classes,
+                        },
                     },
                     "required": [
                         "meal_type",
@@ -502,6 +545,7 @@ class AIUtils:
                         "sugar_score",
                         "preparation_time_score",
                         "preparation_difficulty_score",
+                        "meal_class",
                     ],
                 },
             }
@@ -603,21 +647,38 @@ class AIUtils:
         prompt.append(self.to_gemini_text("Analyze this kitchen image:"))
         prompt.append(self.to_gemini_image("current_frame.jpg"))
 
+        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 1)
+
         response = self._ask(
             prompt=prompt,
             chat=self._get_new_chat(),
             build_type="kitchen_image_analysis",
             generic_parameter=analysis_focus,
+            client=client,
         )
 
-        print("Kitchen Image Analysis Result:")
         print(json.dumps(response, indent=2))
+        return response
 
-    def ask_ai(self):
-        return None
+    def ask_ai(self, prompt):
+        prompt = [self.to_gemini_text(prompt)]
+
+        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 0)
+
+        response = self._ask(
+            prompt=prompt,
+            chat=self._get_new_chat(),
+            build_type="ask_ai",
+            generic_parameter=analysis_focus,
+            client=client,
+        )
+
+        return response
 
     def generate_sql_query(self, user_input, db_path):
         """Generates an SQL query based on user input and database structure."""
+
+        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 2)
 
         prompt = []
         prompt.append(self.to_gemini_text(user_input))
@@ -627,6 +688,7 @@ class AIUtils:
             chat=self._get_new_chat(),
             build_type="query",
             generic_parameter=db_path,
+            client=client,
         )
 
         if response and "sql_query" in response:
