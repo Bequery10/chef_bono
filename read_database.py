@@ -1,5 +1,26 @@
 import sqlite3
 import json
+import base64
+import struct
+
+
+def deserialize_embedding(b):
+    if b is None:
+        return None
+    if isinstance(b, str):
+        b = base64.b64decode(b)
+    if len(b) % 4 != 0:
+        return b
+    n = len(b) // 4
+    return list(struct.unpack(f"{n}f", b))
+
+
+def serialize_bytes(obj, key=None):
+    if key == "embedding" and obj is not None:
+        return deserialize_embedding(obj)
+    if isinstance(obj, bytes):
+        return base64.b64encode(obj).decode("utf-8")
+    return obj
 
 
 def read_recipes():
@@ -9,8 +30,12 @@ def read_recipes():
     rows = cursor.fetchall()
     columns = [description[0] for description in cursor.description]
     conn.close()
-    # Convert rows to list of dicts
-    recipes = [dict(zip(columns, row)) for row in rows]
+    recipes = []
+    for row in rows:
+        recipe = {}
+        for key, value in zip(columns, row):
+            recipe[key] = serialize_bytes(value, key)
+        recipes.append(recipe)
     return recipes
 
 

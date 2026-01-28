@@ -4,27 +4,43 @@ import requests
 from bs4 import BeautifulSoup
 import sqlite3
 import random
+import time
+import struct
+import sqlite_vec
+
+
+def serialize_f32(vector):
+    """Serializes a list of floats into a compact 'raw bytes' format."""
+    return struct.pack("%sf" % len(vector), *vector)
 
 
 def _save_to_database(recipes):
     conn = sqlite3.connect("recipes.db")
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
     cursor = conn.cursor()
     for recipe in recipes:
+        # Serialize embedding if it's a list
+        embedding = recipe["embedding"]
+        if isinstance(embedding, list):
+            embedding = serialize_f32(embedding)
         cursor.execute(
             """
             INSERT INTO recipes (
                 name, ingredients, preparation,
-                meal_type, main_ingredient, nationality,
+                embedding, meal_type, main_ingredient, nationality,
                 vegetarian, vegan, gluten_free, dairy_free, nut_free,
                 high_fiber, weight_loss_diet, muscle_gain_bulking, balanced_healthy,
                 carb_score, protein_score, fat_score, calorie_score, sugar_score,
                 preparation_time_score, preparation_difficulty_score, meal_class
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 recipe["name"],
                 recipe["ingredients"],
                 recipe["preparation"],
+                embedding,
                 recipe["meal_type"],
                 recipe["main_ingredient"],
                 recipe["nationality"],
@@ -49,7 +65,6 @@ def _save_to_database(recipes):
         )
     conn.commit()
     conn.close()
-    print("Recipes saved to database successfully.")
 
 
 def _scrap_html(html_content):
@@ -87,9 +102,9 @@ def _recipe_categorizer(recipes):
 if __name__ == "__main__":
 
     recipes = []
-    flag_adder = ai_utils.AIUtils("gemini-2.5-flash")
-
-    for i in range(5):
+    flag_adder = ai_utils.AIUtils("gemini-2.5-flash-lite")
+    start_time = time.time()
+    for i in range(3):
 
         response = requests.get(
             f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,1000000)}"
@@ -107,14 +122,12 @@ if __name__ == "__main__":
 
     for recipe, flag in zip(recipes, flags):
         recipe_with_flags = {**recipe, **flag}
-        # Add categorizes field, e.g. from flag or your own logic
-        # Here, as an example, we use main_ingredient as categorizes if it matches, else set to "Unknown"
-        # You should replace this logic with your actual category assignment
         recipe_with_flags["categorizes"] = flag.get("main_ingredient", "Unknown")
         required_fields = [
             "name",
             "ingredients",
             "preparation",
+            "embedding",
             "meal_type",
             "main_ingredient",
             "nationality",
@@ -143,6 +156,9 @@ if __name__ == "__main__":
             recipes_with_flags.append(recipe_with_flags)
 
     _save_to_database(recipes_with_flags)
-
+    flag_adder.set_embeddings()
+    print("Finished adding rows to database.")
+    end_time = time.time()
+    print(f"Time taken to process: {end_time - start_time} seconds")
     recipes = None
     flags = None

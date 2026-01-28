@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import pprint
+import row_adder
 
 
 class Chat:
@@ -580,7 +581,7 @@ class AIUtils:
 
         elif build_type == "get_user_intent":
             instruction = f"""
-                What is 
+                
             """
 
         return instruction, schema
@@ -630,6 +631,10 @@ class AIUtils:
         )
 
     def _add_flags(self, prompt):
+        def insert_dict_at_index(d, index, key, value):
+            items = list(d.items())
+            items.insert(index, (key, value))
+            return dict(items)
 
         gemini_prompt = [self.to_gemini_text(prompt)]
 
@@ -638,6 +643,10 @@ class AIUtils:
             chat=self._get_new_chat(),
             build_type="add_flags",
         )
+        # Update the dictionaries in the response list
+        for i, recipe in enumerate(response):
+            print(prompt[i]["name"])
+            response[i] = insert_dict_at_index(recipe, 0, "embedding", [0.1])
         return response
 
     def _analyze_kitchen_image(self, analysis_focus):
@@ -734,3 +743,35 @@ class AIUtils:
             return None
 
         return types.Part.from_bytes(data=image_data, mime_type=mime_type)
+
+    def set_embeddings(self, key_index=0):
+        from sklearn.decomposition import PCA
+
+        db = sqlite3.connect("recipes.db")
+        cursor = db.cursor()
+        recipes = cursor.execute("SELECT id, name FROM recipes").fetchall()
+        if not recipes:
+            db.close()
+            return
+
+        model_name = "gemini-embedding-001"
+        names = [name for _, name in recipes]
+        embeddings = [
+            self.client.models.embed_content(model=model_name, contents=name)
+            .embeddings[0]
+            .values
+            for name in names
+        ]
+        n_samples = len(embeddings)
+        n_features = len(embeddings[0])
+        n_components = min(256, n_samples, n_features)
+        pca = PCA(n_components=n_components)
+        embeddings_pca = pca.fit_transform(embeddings)
+
+        for (recipe_id, _), embedding in zip(recipes, embeddings_pca):
+            db.execute(
+                "UPDATE recipes SET embedding = ? WHERE id = ?",
+                (row_adder.serialize_f32(embedding), recipe_id),
+            )
+        db.commit()
+        db.close()
