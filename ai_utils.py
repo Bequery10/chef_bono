@@ -9,6 +9,9 @@ import re
 import sqlite3
 import pprint
 import row_adder
+import sqlite_vec
+from sklearn.decomposition import PCA
+import joblib
 
 
 class Chat:
@@ -482,7 +485,7 @@ class AIUtils:
             ]
             instruction = f"""
             You are an expert AI that provide values for the categories based on the recipes provided.
-            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
+            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'spice_level_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
             Use the following guidelines to determine the values:
             For the integer category 'meal_type', provide 1 for breakfast, 2 for lunch, and 3 for dinner.
             For the string category 'main_ingredient', provide the primary ingredient used in the recipe. Make sure ingredient name is convential and straightforward like "chicken", "meat", "cucumber", "potato". For 'nationality', provide the cuisine type like "Italian", "Chinese", "Mexican", etc, if possible. If not possible, provide "Unknown". 
@@ -514,13 +517,26 @@ class AIUtils:
                         "weight_loss_diet": {"type": "boolean"},
                         "muscle_gain_bulking": {"type": "boolean"},
                         "balanced_healthy": {"type": "boolean"},
-                        "carb_score": {"type": "number"},
-                        "protein_score": {"type": "number"},
-                        "fat_score": {"type": "number"},
-                        "calorie_score": {"type": "number"},
-                        "sugar_score": {"type": "number"},
-                        "preparation_time_score": {"type": "number"},
-                        "preparation_difficulty_score": {"type": "number"},
+                        "carb_score": {"type": "number", "minimum": 0, "maximum": 1},
+                        "protein_score": {"type": "number", "minimum": 0, "maximum": 1},
+                        "fat_score": {"type": "number", "minimum": 0, "maximum": 1},
+                        "calorie_score": {"type": "number", "minimum": 0, "maximum": 1},
+                        "sugar_score": {"type": "number", "minimum": 0, "maximum": 1},
+                        "spice_level_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
+                        "preparation_time_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
+                        "preparation_difficulty_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
                         "meal_class": {
                             "type": "string",
                             "enum": meal_classes,
@@ -544,6 +560,7 @@ class AIUtils:
                         "fat_score",
                         "calorie_score",
                         "sugar_score",
+                        "spice_level_score",
                         "preparation_time_score",
                         "preparation_difficulty_score",
                         "meal_class",
@@ -552,37 +569,114 @@ class AIUtils:
             }
 
         elif build_type == "query":
+            db = sqlite3.connect("recipes.db")
 
+            db.enable_load_extension(True)
+            sqlite_vec.load(db)
+            db.enable_load_extension(False)
+            cursor = db.cursor()
             table_sql = None
-            with sqlite3.connect(generic_parameter) as conn:
+            with sqlite3.connect(generic_parameter[0]) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='recipes';"
-                )
+                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
                 result = cursor.fetchone()
-                if result:
-                    table_sql = result[0]
+                cursor.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='recipes_vec';"
+                )
+                result1 = cursor.fetchone()
+                if result and result1:
+                    table_sql = result[0] + "\n" + result1[0]
+                embedding = generic_parameter[1]
 
+                vec_sqlite_query_format_example = f"""
+                        SELECT
+                        recipes.*
+                        FROM recipes_vec
+                        JOIN recipes ON recipes_vec.rowid = recipes.id
+                        WHERE recipes_vec.embedding MATCH [0.1, 0.2, 0.3, ..., 0.256]
+                        ORDER BY recipes_vec.distance
+                        LIMIT 3;
+                        ;
+
+                        //If you want to use vector search, you must use the MATCH clause with a query embedding
+                        """
                 instruction = f"""
-                    You are an expert AI that writes sql query to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
-                    The sqllite3 database's "recipes" table's structure: {table_sql}
+                    You are an expert AI that fills sql query blocks to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
+                    The sqllite3 database's "recipes" table's and recipes_vec structures: {table_sql}
+                    If you need to perform nearest neighbor search,
+                    here is the query format to perform nearest neighbor search using sqlite-vec extension:
+                    {vec_sqlite_query_format_example}
                     Consider the given database structure when generating a query.
+                    Use the following keyword in your schema: SELECT, DISTINCT, COUNT, SUM, AVG, MIN, MAX, FROM, JOIN, ON, WHERE, MATCH, LIKE, GROUP BY, HAVING, ORDER BY, DESC, LIMIT.
+                    If you don't neet any of the keywords of the keyword list, still include them in the response with empty string, None or false values.
+                    If you must perform vector search, make sure to set FROM to "recipes_vec", JOIN to "recipes", ON to "recipes_vec.rowid = recipes.id", WHERE to "recipes_vec.embedding" and MATCH to True.
                 """
 
             schema = {
                 "type": "object",
                 "properties": {
-                    "sql_query": {
+                    "SELECT": {"type": "string", "example": "*"},
+                    "DISTINCT": {"type": "boolean", "example": False},
+                    "COUNT": {"type": "boolean", "example": False},
+                    "SUM": {"type": "string"},  # field to sum
+                    "AVG": {
                         "type": "string",
+                        "example": "field_name",
+                    },  # field to average
+                    "MIN": {
+                        "type": "string",
+                        "example": "field_name",
+                    },  # field to get min
+                    "MAX": {
+                        "type": "string",
+                        "example": "field_name",
+                    },  # field to get max
+                    "FROM": {"type": "string", "example": "recipes"},
+                    "JOIN": {"type": "string", "example": "recipes_vec"},
+                    "ON": {
+                        "type": "string",
+                        "example": " recipes.id = recipes_vec.rowid",
                     },
+                    "WHERE": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                    },  # list of filter objects
+                    "MATCH": {
+                        "type": "boolean",
+                        "example": False,
+                        "description": "True for vector search",
+                    },
+                    "LIKE": {"type": "string", "example": "%search_term%"},
+                    "GROUP BY": {"type": "string", "example": "field_name"},
+                    "HAVING": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                    },
+                    "ORDER BY": {"type": "string", "example": "field_name"},
+                    "DESC": {"type": "boolean", "example": False},
+                    "LIMIT": {"type": "integer", "example": 10},
                 },
-                "required": ["sql_query"],
+                "required": [
+                    "SELECT",
+                    "DISTINCT",
+                    "COUNT",
+                    "SUM",
+                    "AVG",
+                    "MIN",
+                    "MAX",
+                    "FROM",
+                    "JOIN",
+                    "ON",
+                    "WHERE",
+                    "MATCH",
+                    "LIKE",
+                    "GROUP BY",
+                    "HAVING",
+                    "ORDER BY",
+                    "DESC",
+                    "LIMIT",
+                ],
             }
-
-        elif build_type == "get_user_intent":
-            instruction = f"""
-                
-            """
 
         return instruction, schema
 
@@ -646,17 +740,17 @@ class AIUtils:
         # Update the dictionaries in the response list
         for i, recipe in enumerate(response):
             print(prompt[i]["name"])
-            response[i] = insert_dict_at_index(recipe, 0, "embedding", [0.1])
+            response[i] = insert_dict_at_index(recipe, 0, "embedding", [0.0] * 256)
         return response
 
-    def _analyze_kitchen_image(self, analysis_focus):
+    def _analyze_kitchen_image(self, analysis_focus, key_index=2):
         """Analyzes a kitchen image based on the provided focus."""
 
         prompt = []
         prompt.append(self.to_gemini_text("Analyze this kitchen image:"))
         prompt.append(self.to_gemini_image("current_frame.jpg"))
 
-        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 1)
+        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", key_index)
 
         response = self._ask(
             prompt=prompt,
@@ -686,7 +780,7 @@ class AIUtils:
 
     def generate_sql_query(self, user_input, db_path):
         """Generates an SQL query based on user input and database structure."""
-
+        embedding = self.get_embeddings([user_input])
         client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 2)
 
         prompt = []
@@ -696,15 +790,39 @@ class AIUtils:
             prompt=prompt,
             chat=self._get_new_chat(),
             build_type="query",
-            generic_parameter=db_path,
+            generic_parameter=[db_path, embedding],
             client=client,
         )
 
-        if response and "sql_query" in response:
-            return response["sql_query"]
-        else:
+        if not response and "SELECT" in response:
             print("Failed to generate SQL query.")
             return None
+
+        query = ""
+        for key in response:
+            if response[key]:
+                if not isinstance(response[key], bool):
+                    query += f" {key} {response[key]}"
+                    query += "\n"
+                else:
+                    if response[key]:
+                        query += f" {key}"
+
+                        if key == "MATCH":
+                            new_embedding = list(embedding)
+                            if len(embedding) < 256:
+                                new_embedding += [0.0] * (256 - len(embedding))
+
+                            query += f" '{json.dumps(new_embedding)}'"
+
+                            for key1 in response:
+                                if key1 == "LIMIT":
+                                    query += f" AND  recipes_vec.k = {response[key1]}"
+
+                        query += "\n"
+
+        query += ";"
+        return query
 
     def to_gemini_text(self, obj):
         """
@@ -745,33 +863,66 @@ class AIUtils:
         return types.Part.from_bytes(data=image_data, mime_type=mime_type)
 
     def set_embeddings(self, key_index=0):
-        from sklearn.decomposition import PCA
 
         db = sqlite3.connect("recipes.db")
+        import sqlite_vec
+
+        db.enable_load_extension(True)
+        sqlite_vec.load(db)
+        db.enable_load_extension(False)
         cursor = db.cursor()
-        recipes = cursor.execute("SELECT id, name FROM recipes").fetchall()
+        recipes = cursor.execute("SELECT id, name, ingredients FROM recipes").fetchall()
         if not recipes:
             db.close()
             return
 
         model_name = "gemini-embedding-001"
-        names = [name for _, name in recipes]
+        names_and_ingredients = [
+            (name, ingredients) for _, name, ingredients in recipes
+        ]
         embeddings = [
-            self.client.models.embed_content(model=model_name, contents=name)
+            self.client.models.embed_content(
+                model=model_name,
+                contents="recipe_name:" + name + "\n ingredients: " + ingredients,
+            )
             .embeddings[0]
             .values
-            for name in names
+            for name, ingredients in names_and_ingredients
         ]
         n_samples = len(embeddings)
         n_features = len(embeddings[0])
-        n_components = min(256, n_samples, n_features)
+
+        print("n_samples:", n_samples, "\nn_features:", n_features)
+        n_components = min(256, n_samples)
         pca = PCA(n_components=n_components)
         embeddings_pca = pca.fit_transform(embeddings)
 
-        for (recipe_id, _), embedding in zip(recipes, embeddings_pca):
-            db.execute(
-                "UPDATE recipes SET embedding = ? WHERE id = ?",
-                (row_adder.serialize_f32(embedding), recipe_id),
+        joblib.dump(pca, "pca_model.joblib")
+
+        for (recipe_id, _, _), embedding in zip(recipes, embeddings_pca):
+            # Pad or truncate to 256 dimensions
+            embedding = list(embedding)
+            if len(embedding) < 256:
+                embedding += [0.0] * (256 - len(embedding))
+            elif len(embedding) > 256:
+                embedding = embedding[:256]
+
+            cursor.execute("DELETE FROM recipes_vec")
+            cursor.execute(
+                "REPLACE INTO recipes_vec(rowid, embedding) VALUES (?, ?)",
+                (recipe_id, row_adder.serialize_f32(embedding)),
             )
         db.commit()
         db.close()
+
+    def get_embeddings(self, texts, key_index=1):
+        model_name = "gemini-embedding-001"
+        embeddings = [
+            self.client.models.embed_content(model=model_name, contents=text)
+            .embeddings[0]
+            .values
+            for text in texts
+        ]
+        pca = joblib.load("pca_model.joblib")
+
+        return pca.transform(embeddings)[0] if pca else embeddings

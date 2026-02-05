@@ -8,7 +8,7 @@ import time
 if __name__ == "__main__":
     database = db_query_handler.Database("recipes.db")
     ai = ai_utils.AIUtils()
-    mode = 0
+    mode = 1
     if mode == 0:
         initial_time = time.time()
         analysis = ai._analyze_kitchen_image("general")
@@ -22,6 +22,7 @@ if __name__ == "__main__":
         prompt = input()
 
         query = ai.generate_sql_query(prompt, database.db_path)
+
         if query:
             print(f"Generated SQL Query: {query}")
             results = database.execute_query(query)

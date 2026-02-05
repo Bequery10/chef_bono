@@ -21,18 +21,15 @@ def _save_to_database(recipes):
     conn.enable_load_extension(False)
     cursor = conn.cursor()
     for recipe in recipes:
-        # Serialize embedding if it's a list
-        embedding = recipe["embedding"]
-        if isinstance(embedding, list):
-            embedding = serialize_f32(embedding)
+        # Remove embedding from the insert into recipes
         cursor.execute(
             """
             INSERT INTO recipes (
                 name, ingredients, preparation,
-                embedding, meal_type, main_ingredient, nationality,
+                meal_type, main_ingredient, nationality,
                 vegetarian, vegan, gluten_free, dairy_free, nut_free,
                 high_fiber, weight_loss_diet, muscle_gain_bulking, balanced_healthy,
-                carb_score, protein_score, fat_score, calorie_score, sugar_score,
+                carb_score, protein_score, fat_score, calorie_score, sugar_score, spice_level_score,
                 preparation_time_score, preparation_difficulty_score, meal_class
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -40,7 +37,6 @@ def _save_to_database(recipes):
                 recipe["name"],
                 recipe["ingredients"],
                 recipe["preparation"],
-                embedding,
                 recipe["meal_type"],
                 recipe["main_ingredient"],
                 recipe["nationality"],
@@ -58,10 +54,21 @@ def _save_to_database(recipes):
                 recipe["fat_score"],
                 recipe["calorie_score"],
                 recipe["sugar_score"],
+                recipe["spice_level_score"],
                 recipe["preparation_time_score"],
                 recipe["preparation_difficulty_score"],
                 recipe["meal_class"],
             ),
+        )
+        # Get the id of the inserted recipe
+        recipe_id = cursor.lastrowid
+        # Insert embedding into recipes_vec
+        embedding = recipe["embedding"]
+        if isinstance(embedding, list):
+            embedding = serialize_f32(embedding)
+        cursor.execute(
+            "INSERT INTO recipes_vec(rowid, embedding) VALUES (?, ?)",
+            (recipe_id, embedding),
         )
     conn.commit()
     conn.close()
@@ -104,7 +111,7 @@ if __name__ == "__main__":
     recipes = []
     flag_adder = ai_utils.AIUtils("gemini-2.5-flash-lite")
     start_time = time.time()
-    for i in range(3):
+    for i in range(5):
 
         response = requests.get(
             f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,1000000)}"
@@ -145,6 +152,7 @@ if __name__ == "__main__":
             "fat_score",
             "calorie_score",
             "sugar_score",
+            "spice_level_score",
             "preparation_time_score",
             "preparation_difficulty_score",
             "meal_class",

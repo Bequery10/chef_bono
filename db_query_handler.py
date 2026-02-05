@@ -7,6 +7,11 @@ class Database:
 
     def execute_query(self, query, params=None):
         conn = sqlite3.connect(self.db_path)
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
         cursor = conn.cursor()
         try:
             if params:

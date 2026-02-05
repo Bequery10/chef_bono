@@ -10,12 +10,14 @@ def serialize_f32(vector):
     return struct.pack("%sf" % len(vector), *vector)
 
 
-# Create the database schema from SQL file
-os.system("sqlite3 recipes.db < database_structure.sql")
+with open("database_structure.sql", "r") as f:
+    sql = f.read()
+
 conn = sqlite3.connect("recipes.db")
 conn.enable_load_extension(True)
 sqlite_vec.load(conn)
 conn.enable_load_extension(False)
+conn.executescript(sql)
 
 (sqlite_version, vec_version) = conn.execute(
     "select sqlite_version(), vec_version()"

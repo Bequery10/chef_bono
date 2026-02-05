@@ -24,9 +24,21 @@ def serialize_bytes(obj, key=None):
 
 
 def read_recipes():
+    import sqlite_vec
+
     conn = sqlite3.connect("recipes.db")
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM recipes")
+    # Join recipes with recipes_vec to get the embedding
+    cursor.execute(
+        """
+        SELECT recipes.*, recipes_vec.embedding
+        FROM recipes
+        LEFT JOIN recipes_vec ON recipes.id = recipes_vec.rowid
+    """
+    )
     rows = cursor.fetchall()
     columns = [description[0] for description in cursor.description]
     conn.close()
