@@ -1,4 +1,5 @@
 import sqlite3
+import sqlite_vec
 
 
 class Database:
@@ -7,7 +8,6 @@ class Database:
 
     def execute_query(self, query, params=None):
         conn = sqlite3.connect(self.db_path)
-        import sqlite_vec
 
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)

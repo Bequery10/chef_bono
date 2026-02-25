@@ -1,20 +1,22 @@
-from google import genai
-import os
-from dotenv import load_dotenv
-import numpy as np
-from sklearn.decomposition import PCA
-import joblib
-import time
-import pickle
+class Chat:
+    def __init__(self, id):
+        self.id = id
+        self.data = None
+
+    def get_id(self):
+        return self.id
 
 
-def _read_bool_arr():
-    with open("bool_array.pkl", "rb") as f:
-        loaded_array = pickle.load(f)
-    return loaded_array
+class Other:
+
+    def print_chat_data(self):
+        chat1 = Chat(1)
+        chat1.data = "Hello, this is chef bono!"
+
+        chat2 = Chat(2)
+        print(chat1.data)
 
 
-bool_array = _read_bool_arr()
-for i in range(len(bool_array)):
-    if bool_array[i]:
-        print(i)
+printer = Other()
+
+printer.print_chat_data()

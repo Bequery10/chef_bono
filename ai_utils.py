@@ -12,16 +12,79 @@ import row_adder
 import sqlite_vec
 from sklearn.decomposition import PCA
 import joblib
+import db_query_handler
+
+
+class Recipe:
+    def __init__(
+        self,
+        id=None,
+        name=None,
+        ingredients=None,
+        preparation=None,
+        meal_type=None,
+        main_ingredient=None,
+        nationality=None,
+        vegetarian=False,
+        vegan=False,
+        gluten_free=False,
+        dairy_free=False,
+        nut_free=False,
+        high_fiber=False,
+        weight_loss_diet=False,
+        muscle_gain_bulking=False,
+        balanced_healthy=False,
+        carb_score=0.0,
+        protein_score=0.0,
+        fat_score=0.0,
+        calorie_score=0.0,
+        sugar_score=0.0,
+        spice_level_score=0.0,
+        preparation_time_score=0.0,
+        preparation_difficulty_score=0.0,
+        meal_class=None,
+    ):
+        self.id = id
+        self.name = name
+        self.ingredients = ingredients
+        self.preparation = preparation
+        self.meal_type = meal_type
+        self.main_ingredient = main_ingredient
+        self.nationality = nationality
+        self.vegetarian = vegetarian
+        self.vegan = vegan
+        self.gluten_free = gluten_free
+        self.dairy_free = dairy_free
+        self.nut_free = nut_free
+        self.high_fiber = high_fiber
+        self.weight_loss_diet = weight_loss_diet
+        self.muscle_gain_bulking = muscle_gain_bulking
+        self.balanced_healthy = balanced_healthy
+        self.carb_score = carb_score
+        self.protein_score = protein_score
+        self.fat_score = fat_score
+        self.calorie_score = calorie_score
+        self.sugar_score = sugar_score
+        self.spice_level_score = spice_level_score
+        self.preparation_time_score = preparation_time_score
+        self.preparation_difficulty_score = preparation_difficulty_score
+        self.meal_class = meal_class
+        self.preparation_and_cooking_suggestion = (None,)
+        self.serving_suggestion = (None,)
+        self.safe_keeping_suggestion = (None,)
+
+        self.current_step = ""
+        self.recipe = None
 
 
 class Chat:
     def __init__(
-        self, input_token_limit, output_token_limit, context_window_limit, history=[]
+        self, input_token_limit, output_token_limit, context_window_limit, history=None
     ):
         self.input_token_limit = input_token_limit
         self.output_token_limit = output_token_limit
         self.context_window_limit = context_window_limit
-        self.chat_history = history
+        self.chat_history = history if history is not None else []
         self.started = False
 
     def _update_chat_history(self, prompt, output):
@@ -178,7 +241,13 @@ class AIUtils:
             return False  # failsafe
 
     def _get_config(
-        self, instruction, schema=None, temperature=0.7, top_k=40, top_p=0.9
+        self,
+        instruction=None,
+        image_instruction=None,
+        schema=None,
+        temperature=0.7,
+        top_k=40,
+        top_p=0.9,
     ):
         # Create configuration with system instruction
         generate_content_config = types.GenerateContentConfig(
@@ -209,11 +278,15 @@ class AIUtils:
                 ),
             ],
             response_mime_type="application/json",
-            system_instruction=[
-                types.Part.from_text(
-                    text=instruction,
-                ),
-            ],
+            system_instruction=(
+                [
+                    types.Part.from_text(
+                        text=instruction,
+                    ),
+                ].append(self.to_gemini_image(image_instruction))
+                if image_instruction
+                else None
+            ),
             response_schema=schema,
         )
 
@@ -322,12 +395,13 @@ class AIUtils:
         top_k=40,
         generic_parameter=None,
         client=None,
+        tools=None,
     ):
         if client is None:
             client = self.client
 
         print("Asking AI...")
-        instruction, schema = self._get_build(
+        instruction, image_instruction, schema = self._get_build(
             build_type=build_type,
             generic_parameter=generic_parameter,
         )
@@ -337,13 +411,21 @@ class AIUtils:
 
         response = ""
 
-        config = self._get_config(
-            instruction=instruction,
-            schema=schema,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-        )
+        config = None
+
+        if not tools:
+            config = self._get_config(
+                instruction=instruction,
+                schema=schema,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+            )
+
+        else:
+            config = types.GenerateContentConfig(
+                tools=[tools], top_p=top_p, top_k=top_k, temperature=temperature
+            )
 
         prompt_parts = []
         for role, parts in chat.chat_history:
@@ -365,10 +447,24 @@ class AIUtils:
             print(e)
             return None
 
+        if (
+            hasattr(response, "candidates")
+            and len(response.candidates) > 0
+            and hasattr(response.candidates[0].content.parts[0], "function_call")
+            and response.candidates[0].content.parts[0].function_call is not None
+        ):
+
+            function_call = response.candidates[0].content.parts[0].function_call
+
+            return function_call.name, function_call.args
+
         if response and hasattr(response, "parsed"):
 
             chat._update_chat_history(prompt, [self.to_gemini_text(response.parsed)])
+
             return response.parsed
+
+        return None
 
     def _get_build(
         self,
@@ -377,6 +473,7 @@ class AIUtils:
     ):
 
         instruction = None
+        image_instruction = None
         schema = None
 
         if build_type == "agent_check":
@@ -586,6 +683,7 @@ class AIUtils:
                 result1 = cursor.fetchone()
                 if result and result1:
                     table_sql = result[0] + "\n" + result1[0]
+
                 embedding = generic_parameter[1]
 
                 vec_sqlite_query_format_example = f"""
@@ -602,6 +700,225 @@ class AIUtils:
                         """
                 instruction = f"""
                     You are an expert AI that fills sql query blocks to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
+                    Consider the given database structure when generating a query.
+                    The sqllite3 database's "recipes" table's and "recipes_vec" structures: {table_sql}
+                    If you need to perform nearest neighbor search,
+                    here is the query format to perform nearest neighbor search using sqlite-vec extension:
+                    {vec_sqlite_query_format_example}
+                    Use the following keyword in your schema: SELECT, DISTINCT, COUNT, SUM, AVG, MIN, MAX, FROM, JOIN, ON, WHERE, MATCH, LIKE, GROUP BY, HAVING, ORDER BY, DESC, LIMIT.
+                    If you don't neet any of the keywords of the keyword list, still include them in the response with empty string, None or false values.
+                    If you must perform vector search, make sure to set FROM to "recipes_vec", JOIN to "recipes", ON to "recipes_vec.rowid = recipes.id", WHERE to "recipes_vec.embedding" and MATCH to True.
+
+                    IMPORTANT:
+                        There is only these 2 tables in the database: "recipes", "recipes_vec".
+                        Make sure not to use any other table name in your query. 
+                    """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "SELECT": {
+                        "type": "string",
+                        "enum": [
+                            "*",
+                            "id",
+                            "name",
+                            "ingredients",
+                            "preparation",
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "vegetarian",
+                            "vegan",
+                            "gluten_free",
+                            "dairy_free",
+                            "nut_free",
+                            "high_fiber",
+                            "weight_loss_diet",
+                            "muscle_gain_bulking",
+                            "balanced_healthy",
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                            "meal_class",
+                            "embedding",
+                        ],
+                        "example": "*",
+                    },
+                    "DISTINCT": {"type": "boolean", "example": False},
+                    "COUNT": {"type": "boolean", "example": False},
+                    "SUM": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                    },
+                    "AVG": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "MIN": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "MAX": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "FROM": {
+                        "type": "string",
+                        "enum": ["recipes", "recipes_vec"],
+                        "example": "recipes",
+                    },
+                    "JOIN": {
+                        "type": "string",
+                        "enum": ["recipes", "recipes_vec"],
+                        "example": "recipes_vec",
+                    },
+                    "ON": {
+                        "type": "string",
+                        "example": "recipes.id = recipes_vec.rowid",
+                    },
+                    "WHERE": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                    },
+                    "MATCH": {
+                        "type": "boolean",
+                        "example": False,
+                        "description": "True for vector search",
+                    },
+                    "LIKE": {"type": "string", "example": "%search_term%"},
+                    "GROUP BY": {
+                        "type": "string",
+                        "enum": [
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "vegetarian",
+                            "vegan",
+                            "gluten_free",
+                            "dairy_free",
+                            "nut_free",
+                            "high_fiber",
+                            "weight_loss_diet",
+                            "muscle_gain_bulking",
+                            "balanced_healthy",
+                            "meal_class",
+                        ],
+                        "example": "meal_class",
+                    },
+                    "HAVING": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                    },
+                    "ORDER BY": {
+                        "type": "string",
+                        "enum": [
+                            "id",
+                            "name",
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                            "meal_class",
+                        ],
+                        "example": "spice_level_score",
+                    },
+                    "DESC": {"type": "boolean", "example": False},
+                    "LIMIT": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "example": 10,
+                    },
+                },
+                "required": ["SELECT", "FROM"],
+            }
+        elif build_type == "decide_intent":
+
+            db = sqlite3.connect("recipes.db")
+
+            db.enable_load_extension(True)
+            sqlite_vec.load(db)
+            db.enable_load_extension(False)
+            cursor = db.cursor()
+            table_sql = None
+            with sqlite3.connect("recipes.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
+                result = cursor.fetchone()
+                cursor.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='recipes_vec';"
+                )
+                result1 = cursor.fetchone()
+                if result and result1:
+                    table_sql = result[0] + "\n" + result1[0]
+                embedding = generic_parameter[0]
+
+                vec_sqlite_query_format_example = f"""
+                        SELECT
+                        recipes.*
+                        FROM recipes_vec
+                        JOIN recipes ON recipes_vec.rowid = recipes.id
+                        WHERE recipes_vec.embedding MATCH [0.1, 0.2, 0.3, ..., 0.256]
+                        ORDER BY recipes_vec.distance
+                        LIMIT 3;
+                        ;
+
+                        //If you want to use vector search, you must use the MATCH clause with a query embedding
+                        """
+                generate_sql_query_instruction = f"""
+                    You can query the sqllite3 ({sqlite3.version_info}) database based on the user input.
                     The sqllite3 database's "recipes" table's and recipes_vec structures: {table_sql}
                     If you need to perform nearest neighbor search,
                     here is the query format to perform nearest neighbor search using sqlite-vec extension:
@@ -612,73 +929,153 @@ class AIUtils:
                     If you must perform vector search, make sure to set FROM to "recipes_vec", JOIN to "recipes", ON to "recipes_vec.rowid = recipes.id", WHERE to "recipes_vec.embedding" and MATCH to True.
                 """
 
+                instruction = f"""
+                    You are an AI assistant that choose a index and a parameter based on the intent of the user prompt.
+                    Based on the function, you will provide an index and a parameter for the intent.
+
+                    Use json schema to provide your response with the following keys:
+                    - index: an integer that is between 0 and 3. Each index corresponds to a function that the AI agent will call based on the user intent.
+                    - query_parameter: an object that contains the parameters for the function if the function requires a database query. The structure of the object should follow the SQL query format with keys like SELECT, FROM, WHERE, etc.
+                    - generic_parameter: a string that contains the parameter for the function if the function requires a generic parameter. For example, it can be the name of the selected recipe or a human friendly response for the user input.
+
+
+                    If the intent is about asking for a recipe(s), choose index 0 and use query_parameter in JSON SCHEMA to provide the parameter as an sql query in the following format: {generate_sql_query_instruction}
+                    If the intent is about selecting a recipe based on the user input, chat history or image, choose index 1 and use generic_parameter in JSON SCHEMA to provide the name of the selected recipe.
+                    If the intent is about asking for cooking instructions, ingredient information, nutritional information, or any other information about a recipe, choose index 2 you don't need to provide a parameter.
+                    if the intent is about casual conversation, asking for cooking tips, asking for ingredient substitutes, or any other non-recipe-information-seeking intent, choose index 3 and use generic_parameter in JSON SCHEMA to provide a human friendly response to the user input.
+                """
+
+                schema = {
+                    "type": "object",
+                    "properties": {
+                        "index": {
+                            "type": "integer",
+                            "description": "The index of the function to call based on the user intent.",
+                        },
+                        "query_parameter": {
+                            "type": "object",
+                            "properties": {
+                                "SELECT": {"type": "string", "example": "*"},
+                                "DISTINCT": {"type": "boolean", "example": False},
+                                "COUNT": {"type": "boolean", "example": False},
+                                "SUM": {"type": "string"},  # field to sum
+                                "AVG": {
+                                    "type": "string",
+                                    "example": "field_name",
+                                },  # field to average
+                                "MIN": {
+                                    "type": "string",
+                                    "example": "field_name",
+                                },  # field to get min
+                                "MAX": {
+                                    "type": "string",
+                                    "example": "field_name",
+                                },  # field to get max
+                                "FROM": {"type": "string", "example": "recipes"},
+                                "JOIN": {"type": "string", "example": "recipes_vec"},
+                                "ON": {
+                                    "type": "string",
+                                    "example": " recipes.id = recipes_vec.rowid",
+                                },
+                                "WHERE": {
+                                    "type": "string",
+                                    "example": "spice_level_score > 0.5 AND vegetarian = true",
+                                },  # list of filter objects
+                                "MATCH": {
+                                    "type": "boolean",
+                                    "example": False,
+                                    "description": "True for vector search",
+                                },
+                                "LIKE": {"type": "string", "example": "%search_term%"},
+                                "GROUP BY": {"type": "string", "example": "field_name"},
+                                "HAVING": {
+                                    "type": "string",
+                                    "example": "spice_level_score > 0.5 AND vegetarian = true",
+                                },
+                                "ORDER BY": {"type": "string", "example": "field_name"},
+                                "DESC": {"type": "boolean", "example": False},
+                                "LIMIT": {"type": "integer", "example": 10},
+                            },
+                            "required": [
+                                "SELECT",
+                                "DISTINCT",
+                                "COUNT",
+                                "SUM",
+                                "AVG",
+                                "MIN",
+                                "MAX",
+                                "FROM",
+                                "JOIN",
+                                "ON",
+                                "WHERE",
+                                "MATCH",
+                                "LIKE",
+                                "GROUP BY",
+                                "HAVING",
+                                "ORDER BY",
+                                "DESC",
+                                "LIMIT",
+                            ],
+                        },
+                        "generic_parameter": {
+                            "type": "string",
+                        },
+                    },
+                }
+
+        elif build_type == "talk":
+            instruction = f"""
+                You are a virtual chef that provides helpful and friendly responses to users based on their input and chat history.
+                You are expected to perform RAG and not to use prior knowledge when offering user recipe(s).
+                You can use additional information like kitchen table image (if provided) within the user prompt {f" and {generic_parameter}" if generic_parameter else ""} if needed.
+                Your responses should be informative, engaging, and tailored to the user's needs and preferences.
+                Give a human friendly response to the user input. If the user input is a question, provide a clear and concise answer. If the user input is a statement, provide a relevant and engaging response.
+                Do not answers questions that does not relate to the ones that a chef would known or do, such as questions about sports, politics, celebrities, etc. If the user asks a question that does not relate to cooking or kitchen management, respond with "I'm here to help with cooking and kitchen-related questions. How can I assist you today?".
+                Useful feedback: Do not write a query or something that is not human friendly.
+                Use json schema to provide your response with the following key:
+                - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
+            """
+
+            instruction = f"""
+                You're a virtual chef. Keep convos fun and short as possible.
+                Use json schema to provide your response with the following key:
+                - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
+                - keep_convo_alive: a boolean that indicates whether the response should include a question or a statement that encourages the user to continue the conversation.
+            """
+
             schema = {
                 "type": "object",
                 "properties": {
-                    "SELECT": {"type": "string", "example": "*"},
-                    "DISTINCT": {"type": "boolean", "example": False},
-                    "COUNT": {"type": "boolean", "example": False},
-                    "SUM": {"type": "string"},  # field to sum
-                    "AVG": {
+                    "chef's_response": {
                         "type": "string",
-                        "example": "field_name",
-                    },  # field to average
-                    "MIN": {
-                        "type": "string",
-                        "example": "field_name",
-                    },  # field to get min
-                    "MAX": {
-                        "type": "string",
-                        "example": "field_name",
-                    },  # field to get max
-                    "FROM": {"type": "string", "example": "recipes"},
-                    "JOIN": {"type": "string", "example": "recipes_vec"},
-                    "ON": {
-                        "type": "string",
-                        "example": " recipes.id = recipes_vec.rowid",
                     },
-                    "WHERE": {
-                        "type": "string",
-                        "example": "spice_level_score > 0.5 AND vegetarian = true",
-                    },  # list of filter objects
-                    "MATCH": {
+                    "keep_convo_alive": {
                         "type": "boolean",
-                        "example": False,
-                        "description": "True for vector search",
+                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversation.",
                     },
-                    "LIKE": {"type": "string", "example": "%search_term%"},
-                    "GROUP BY": {"type": "string", "example": "field_name"},
-                    "HAVING": {
-                        "type": "string",
-                        "example": "spice_level_score > 0.5 AND vegetarian = true",
-                    },
-                    "ORDER BY": {"type": "string", "example": "field_name"},
-                    "DESC": {"type": "boolean", "example": False},
-                    "LIMIT": {"type": "integer", "example": 10},
                 },
-                "required": [
-                    "SELECT",
-                    "DISTINCT",
-                    "COUNT",
-                    "SUM",
-                    "AVG",
-                    "MIN",
-                    "MAX",
-                    "FROM",
-                    "JOIN",
-                    "ON",
-                    "WHERE",
-                    "MATCH",
-                    "LIKE",
-                    "GROUP BY",
-                    "HAVING",
-                    "ORDER BY",
-                    "DESC",
-                    "LIMIT",
-                ],
+                "required": ["chef's_response", "keep_convo_alive"],
             }
 
-        return instruction, schema
+        elif build_type == "follow_preperation":
+            instruction = f"""
+                You are a virtual chef that helps the user follow the cooking steps and answer questions regarding them based on the selected recipe, user input, chat history, and kitchen image.
+                Here are the steps: {generic_parameter[0]}
+                Here is the current step: {generic_parameter[1]}
+                Your responses should be clear, concise, and easy to follow, guiding the user through the cooking process effectively.
+            """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "cooking_instruction": {
+                        "type": "string",
+                    },
+                },
+                "required": ["cooking_instruction"],
+            }
+
+        return instruction, image_instruction, schema
 
     def _start(self):
         self.started = True
@@ -763,17 +1160,32 @@ class AIUtils:
         print(json.dumps(response, indent=2))
         return response
 
-    def ask_ai(self, prompt):
-        prompt = [self.to_gemini_text(prompt)]
+    def get_intended_function_and_argument(
+        self, user_input, embedding, image_path, chat=None
+    ):
+        if chat is None:
+            chat = self._get_new_chat()
+        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 2)
 
-        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 0)
+        prompt = []
+        prompt.append(self.to_gemini_text(user_input))
+        prompt.append(self.to_gemini_text("Here is the image of the kitchen table:"))
+        prompt.append(self.to_gemini_image(image_path))
+
+        tools = types.Tool(function_declarations=self.get_tool_functions())
+        current_time = time.time()
 
         response = self._ask(
             prompt=prompt,
-            chat=self._get_new_chat(),
-            build_type="ask_ai",
-            generic_parameter=analysis_focus,
+            temperature=0,
+            top_p=0.1,
+            top_k=1,
+            chat=chat,
             client=client,
+            tools=tools,
+        )
+        print(
+            f"Time taken for get_intended_function_and_argument: {time.time() - current_time:.2f} seconds"
         )
 
         return response
@@ -788,41 +1200,20 @@ class AIUtils:
 
         response = self._ask(
             prompt=prompt,
+            top_k=1,
+            top_p=0.1,
+            temperature=0,
             chat=self._get_new_chat(),
             build_type="query",
             generic_parameter=[db_path, embedding],
             client=client,
         )
 
-        if not response and "SELECT" in response:
+        if not response or "SELECT" not in response:
             print("Failed to generate SQL query.")
             return None
 
-        query = ""
-        for key in response:
-            if response[key]:
-                if not isinstance(response[key], bool):
-                    query += f" {key} {response[key]}"
-                    query += "\n"
-                else:
-                    if response[key]:
-                        query += f" {key}"
-
-                        if key == "MATCH":
-                            new_embedding = list(embedding)
-                            if len(embedding) < 256:
-                                new_embedding += [0.0] * (256 - len(embedding))
-
-                            query += f" '{json.dumps(new_embedding)}'"
-
-                            for key1 in response:
-                                if key1 == "LIMIT":
-                                    query += f" AND  recipes_vec.k = {response[key1]}"
-
-                        query += "\n"
-
-        query += ";"
-        return query
+        return self.build_query(response, embedding)
 
     def to_gemini_text(self, obj):
         """
@@ -926,3 +1317,140 @@ class AIUtils:
         pca = joblib.load("pca_model.joblib")
 
         return pca.transform(embeddings)[0] if pca else embeddings
+
+    def build_query(self, response, embedding):
+        query = ""
+        from_is_recipes = False
+        for key in response:
+            if response[key]:
+                if not isinstance(response[key], bool):
+
+                    if key == "FROM" and response[key] == "recipes":
+                        from_is_recipes = True
+
+                    elif key == "JOIN" and from_is_recipes:
+                        continue
+
+                    query += f" {key} {response[key]}"
+                    query += "\n"
+                else:
+                    if response[key]:
+                        query += f" {key}"
+
+                        if key == "MATCH":
+                            new_embedding = list(embedding)
+                            if len(embedding) < 256:
+                                new_embedding += [0.0] * (256 - len(embedding))
+
+                            for key1 in response:
+                                if key1 == "LIMIT":
+                                    query += f" AND  recipes_vec.k = {response[key1]}"
+
+                        query += "\n"
+
+        query += ";"
+
+        return query
+
+    def get_tool_functions(self):
+
+        generate_sql = {
+            "name": "generate_sql",
+            "description": "Generates an SQL query to retrieve recipes based on a user's natural language request.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_request": {
+                        "type": "string",
+                        "description": "The user's request for generating an SQL query in natural language, e.g. 'Find me vegetarian recipes with high spice level', 'Show me the recipes that are suitable for dinner.', 'Show me the recipes that has the ingredient on my kitchen table', ' Show me the type of recipes like the one(s) on my kitchen table'",
+                    },
+                },
+                "required": ["user_request"],
+            },
+        }
+
+        select_recipe = {
+            "name": "select_recipe",
+            "description": " select a recipe based on a user's natural language request.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_selection": {
+                        "type": "string",
+                        "description": "The user's request for a recipe selection in natural language, e.g. 'Choose Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Select the recipe that is suitable for dinner and has high spice level.'",
+                    },
+                },
+                "required": ["user_selection"],
+            },
+        }
+
+        follow_preparation = {
+            "name": "follow_preparation",
+            "description": " continue with the preparation of a selected recipe.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_request": {
+                        "type": "string",
+                        "description": "The user's request for continuing preparation of a selected recipe in natural language, e.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
+                    },
+                },
+                "required": ["user_request"],
+            },
+        }
+
+        respond_to_user = {
+            "name": "respond_to_user",
+            "description": "Reconfirm the user input or respond to the user based on the user input, chat history, kitchen image.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_input": {
+                        "type": "string",
+                        "description": "The user's input in natural language, e.g. 'How are you today ?', 'How does my dish look ?', 'Do you think this dish would be delicious ?', ' I want to ... (unidentifiable input)', ",
+                    },
+                },
+                "required": ["user_input"],
+            },
+        }
+
+        return [generate_sql, select_recipe, follow_preparation, respond_to_user]
+
+        def init_recipe(self, recipe_name):
+            recipe_name = generic_parameter[0]
+
+            query = f"""
+            SELECT * FROM recipe WHERE recipe.name = '{recipe_name}'
+            """
+
+            recipe_info = db_query_handler.Database.execute_query(query)
+
+            self.recipe = Recipe(
+                id=recipe_info[0][0],
+                name=recipe_info[0][1],
+                ingredients=recipe_info[0][2],
+                instructions=recipe_info[0][3],
+                meal_type=recipe_info[0][4],
+                main_ingredient=recipe_info[0][5],
+            )
+
+    def talk_to_ai(self, user_input, chat, image_path=None, generic_parameter=None):
+        prompt = []
+        prompt.append(self.to_gemini_text(user_input))
+        if image_path:
+            prompt.append(self.to_gemini_text("Image of the kitchen table:"))
+            prompt.append(self.to_gemini_image(image_path))
+
+        print(chat.chat_history)
+        response = self._ask(
+            prompt=prompt,
+            chat=chat,
+            build_type="talk",
+            generic_parameter=generic_parameter,
+        )
+
+        if not response or "chef's_response" not in response:
+            print("Failed to get a response from the AI.")
+            return None
+
+        return response["chef's_response"], response["keep_convo_alive"]
