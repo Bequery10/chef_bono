@@ -1,5 +1,6 @@
 import sqlite3
 import sqlite_vec
+import read_database
 
 
 class Database:
@@ -27,3 +28,23 @@ class Database:
         finally:
             cursor.close()
             conn.close()
+
+    def get_recipe(self, recipe_name):
+        query = f"SELECT * FROM recipes WHERE name = '{recipe_name}';"
+        conn = sqlite3.connect(self.db_path)
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        recipe = {}
+        for row in rows:
+            for key, value in zip(columns, row):
+                recipe[key] = read_database.serialize_bytes(value, key)
+        cursor.close()
+        conn.close()
+
+        return recipe

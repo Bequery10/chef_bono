@@ -243,7 +243,6 @@ class AIUtils:
     def _get_config(
         self,
         instruction=None,
-        image_instruction=None,
         schema=None,
         temperature=0.7,
         top_k=40,
@@ -283,9 +282,7 @@ class AIUtils:
                     types.Part.from_text(
                         text=instruction,
                     ),
-                ].append(self.to_gemini_image(image_instruction))
-                if image_instruction
-                else None
+                ]
             ),
             response_schema=schema,
         )
@@ -401,7 +398,7 @@ class AIUtils:
             client = self.client
 
         print("Asking AI...")
-        instruction, image_instruction, schema = self._get_build(
+        instruction, schema = self._get_build(
             build_type=build_type,
             generic_parameter=generic_parameter,
         )
@@ -455,7 +452,9 @@ class AIUtils:
         ):
 
             function_call = response.candidates[0].content.parts[0].function_call
-
+            print(
+                f"Function call detected: {function_call.name} with arguments {function_call.args}"
+            )
             return function_call.name, function_call.args
 
         if response and hasattr(response, "parsed"):
@@ -473,7 +472,6 @@ class AIUtils:
     ):
 
         instruction = None
-        image_instruction = None
         schema = None
 
         if build_type == "agent_check":
@@ -1057,11 +1055,11 @@ class AIUtils:
                 "required": ["chef's_response", "keep_convo_alive"],
             }
 
-        elif build_type == "follow_preperation":
+        elif build_type == "follow_preparation":
             instruction = f"""
                 You are a virtual chef that helps the user follow the cooking steps and answer questions regarding them based on the selected recipe, user input, chat history, and kitchen image.
-                Here are the steps: {generic_parameter[0]}
-                Here is the current step: {generic_parameter[1]}
+                Here is the recipe information:{generic_parameter[0]}
+                Here are the steps for cooking: {generic_parameter[1]}
                 Your responses should be clear, concise, and easy to follow, guiding the user through the cooking process effectively.
             """
 
@@ -1071,11 +1069,31 @@ class AIUtils:
                     "cooking_instruction": {
                         "type": "string",
                     },
+                    "keep_convo_alive": {
+                        "type": "boolean",
+                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversatio or go on with the next step.",
+                    },
                 },
-                "required": ["cooking_instruction"],
+                "required": ["cooking_instruction", "keep_convo_alive"],
             }
 
-        return instruction, image_instruction, schema
+        elif build_type == "build_recipe":
+            instruction = f"""
+                You are an expert that will get recipe information and provide steps for cooking/preparation.
+            """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "cooking&preparation_steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["cooking&preparation_steps"],
+            }
+
+        return instruction, schema
 
     def _start(self):
         self.started = True
@@ -1177,13 +1195,14 @@ class AIUtils:
 
         response = self._ask(
             prompt=prompt,
-            temperature=0,
-            top_p=0.1,
-            top_k=1,
+            temperature=0.5,
+            top_p=0.5,
+            top_k=30,
             chat=chat,
             client=client,
             tools=tools,
         )
+
         print(
             f"Time taken for get_intended_function_and_argument: {time.time() - current_time:.2f} seconds"
         )
@@ -1371,37 +1390,37 @@ class AIUtils:
 
         select_recipe = {
             "name": "select_recipe",
-            "description": " select a recipe based on a user's natural language request.",
+            "description": " select a recipe name based on a user's natural language request. E.g. 'I want a Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Select the recipe that is suitable for dinner and has high spice level.', 'Beef Brocolli Wellington sounds nice.'",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_selection": {
+                    "recipe_name": {
                         "type": "string",
-                        "description": "The user's request for a recipe selection in natural language, e.g. 'Choose Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Select the recipe that is suitable for dinner and has high spice level.'",
+                        "description": "The exact name of the recipe to select based on natural language, e.g. 'Old Italian Lasagna', 'Mexican Pizza', 'Beef-Brocolli Wellington'",
                     },
                 },
-                "required": ["user_selection"],
+                "required": ["recipe_name"],
             },
         }
 
         follow_preparation = {
             "name": "follow_preparation",
-            "description": " continue with the preparation of a selected recipe.",
+            "description": "Continue with the preparation of a selected recipe. E.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_request": {
-                        "type": "string",
-                        "description": "The user's request for continuing preparation of a selected recipe in natural language, e.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
-                    },
+                    # "user_request": {
+                    #    "type": "string",
+                    #    "description": "The user's for continuing preparation of a selected recipe in natural language, e.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
+                    # },
                 },
-                "required": ["user_request"],
+                # "required": ["user_request"],
             },
         }
 
         respond_to_user = {
             "name": "respond_to_user",
-            "description": "Reconfirm the user input or respond to the user based on the user input, chat history, kitchen image.",
+            "description": "Casually talkt to the user based on the user input, chat history, kitchen image.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1441,7 +1460,6 @@ class AIUtils:
             prompt.append(self.to_gemini_text("Image of the kitchen table:"))
             prompt.append(self.to_gemini_image(image_path))
 
-        print(chat.chat_history)
         response = self._ask(
             prompt=prompt,
             chat=chat,
@@ -1454,3 +1472,47 @@ class AIUtils:
             return None
 
         return response["chef's_response"], response["keep_convo_alive"]
+
+    def follow_preparation(
+        self, user_input, chat, image_path=None, generic_parameter=None
+    ):
+        prompt = []
+        prompt.append(self.to_gemini_text(user_input))
+        if image_path:
+            prompt.append(self.to_gemini_text("Image of the kitchen table:"))
+            prompt.append(self.to_gemini_image(image_path))
+
+        response = self._ask(
+            prompt=prompt,
+            chat=chat,
+            build_type="follow_preparation",
+            generic_parameter=generic_parameter,
+        )
+
+        if not response or "chef's_response" not in response:
+            print("Failed to get a response from the AI.")
+            return None
+
+        return response["chef's_response"], response["keep_convo_alive"]
+
+    def get_steps(self, recipe_name, ingredients, preparation):
+        prompt = []
+        prompt.append(self.to_gemini_text("Here is the recipe information:"))
+        prompt.append(self.to_gemini_text(f"Recipe name: {recipe_name}"))
+        prompt.append(self.to_gemini_text(f"Ingredients: {ingredients}"))
+        prompt.append(self.to_gemini_text(f"Preparation: {preparation}"))
+        prompt.append(
+            self.to_gemini_text("Provide the steps for cooking/ preparing this recipe.")
+        )
+
+        response = self._ask(
+            prompt=prompt,
+            chat=self._get_new_chat(),
+            build_type="build_recipe",
+        )
+
+        if not response or "cooking&preparation_steps" not in response:
+            print("Failed to get a response from the AI.")
+            return None
+
+        return response["cooking&preparation_steps"]

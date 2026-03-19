@@ -74,99 +74,76 @@ def _save_to_database(recipes):
     conn.close()
 
 
-def _scrap_html(html_content):
-    soup = BeautifulSoup(html_content, "html.parser")
-
-    name_tag = soup.find("p", class_="H2")
-    recipe_name = name_tag.get_text(strip=True) if name_tag else None
-
-    print(f"Scraping recipe: {recipe_name}")
-    # Extract ingredients
-    ingredients_table = soup.find("span", string="ingredients")
-    ingredients = None
-    if ingredients_table:
-        ingredients_p = ingredients_table.find_next("p", class_="H1")
-        ingredients = (
-            ingredients_p.get_text(separator="\n", strip=True)
-            if ingredients_p
-            else None
-        )
-
-    # Extract preparation
-    prep_table = soup.find("span", string="preparation")
-    preparation = None
-    if prep_table:
-        prep_p = prep_table.find_next("p", class_="H1")
-        preparation = prep_p.get_text(separator="\n", strip=True) if prep_p else None
-
-    return {"name": recipe_name, "ingredients": ingredients, "preparation": preparation}
-
-
 def _recipe_categorizer(recipes):
     pass
 
 
 if __name__ == "__main__":
 
-    recipes = []
     flag_adder = ai_utils.AIUtils("gemini-2.5-flash-lite")
     start_time = time.time()
-    for i in range(5):
 
-        response = requests.get(
-            f"https://cookbooks.com/Recipe-Details.aspx?id={random.randint(1,1000000)}"
-        )
-        if response.status_code != 200:
-            print("Failed to retrieve the webpage.")
-            exit()
+    f = open("scraped_recipes.jsonl", "r")
+    count = 0
+    length = len(f.readlines())
+    f.seek(0)  # Reset file pointer to the beginning after counting lines
+    for i in range(0, length, 5):
+        recipes = []
+        for j in range(5):
+            recipe_data = json.loads(f.readline())
+            print(recipe_data["name"])
+            print(recipe_data["ingredients"])
+            print(recipe_data["preparation"])
+            recipes.append(recipe_data)
+            count += 1
 
-        recipe_data = _scrap_html(response.text)
-        recipes.append(recipe_data)
+        # Add flags to each recipe dict
+        flags = flag_adder._add_flags(recipes)
+        recipes_with_flags = []
 
-    # Add flags to each recipe dict
-    flags = flag_adder._add_flags(recipes)
-    recipes_with_flags = []
+        with open("progress.txt", "w") as progress_file:
+            progress_file.write(f"Processed {count} out of {length} recipes.")
 
-    for recipe, flag in zip(recipes, flags):
-        recipe_with_flags = {**recipe, **flag}
-        recipe_with_flags["categorizes"] = flag.get("main_ingredient", "Unknown")
-        required_fields = [
-            "name",
-            "ingredients",
-            "preparation",
-            "embedding",
-            "meal_type",
-            "main_ingredient",
-            "nationality",
-            "vegetarian",
-            "vegan",
-            "gluten_free",
-            "dairy_free",
-            "nut_free",
-            "high_fiber",
-            "weight_loss_diet",
-            "muscle_gain_bulking",
-            "balanced_healthy",
-            "carb_score",
-            "protein_score",
-            "fat_score",
-            "calorie_score",
-            "sugar_score",
-            "spice_level_score",
-            "preparation_time_score",
-            "preparation_difficulty_score",
-            "meal_class",
-        ]
-        if all(
-            field in recipe_with_flags and recipe_with_flags[field] is not None
-            for field in required_fields
-        ):
-            recipes_with_flags.append(recipe_with_flags)
+        for recipe, flag in zip(recipes, flags):
+            recipe_with_flags = {**recipe, **flag}
+            recipe_with_flags["categorizes"] = flag.get("main_ingredient", "Unknown")
+            required_fields = [
+                "name",
+                "ingredients",
+                "preparation",
+                "embedding",
+                "meal_type",
+                "main_ingredient",
+                "nationality",
+                "vegetarian",
+                "vegan",
+                "gluten_free",
+                "dairy_free",
+                "nut_free",
+                "high_fiber",
+                "weight_loss_diet",
+                "muscle_gain_bulking",
+                "balanced_healthy",
+                "carb_score",
+                "protein_score",
+                "fat_score",
+                "calorie_score",
+                "sugar_score",
+                "spice_level_score",
+                "preparation_time_score",
+                "preparation_difficulty_score",
+                "meal_class",
+            ]
+            if all(
+                field in recipe_with_flags and recipe_with_flags[field] is not None
+                for field in required_fields
+            ):
+                recipes_with_flags.append(recipe_with_flags)
 
-    _save_to_database(recipes_with_flags)
-    flag_adder.set_embeddings()
-    print("Finished adding rows to database.")
-    end_time = time.time()
-    print(f"Time taken to process: {end_time - start_time} seconds")
-    recipes = None
-    flags = None
+        _save_to_database(recipes_with_flags)
+        flag_adder.set_embeddings()
+        print("Finished adding rows to database.")
+        end_time = time.time()
+        print(f"Time taken to process: {end_time - start_time} seconds")
+        recipes = None
+        flags = None
