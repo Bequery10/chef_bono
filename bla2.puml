@@ -1,0 +1,42 @@
+@startuml TextToSpeechService
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor White
+    BorderColor #2E75B6
+    HeaderBackgroundColor #D6E4F0
+    FontName Arial
+}
+
+class TextToSpeechService {
+    - voice : str = "tr-TR-AhmetNeural" <<constant>>
+    - output_file : str = "output.mp3"  <<constant>>
+    --
+    + {async} text_to_speech(text: str) : Coroutine[None]
+    + main() : None
+}
+
+
+
+note right of TextToSpeechService::main
+  calls asyncio.run(text_to_speech())
+end note
+
+class "edge_tts.Communicate" <<library>> {
+}
+
+class "asyncio" <<stdlib>> {
+}
+
+class "Microsoft Edge TTS API" <<cloud>> {
+}
+
+class "output.mp3" <<file>> {
+}
+
+TextToSpeechService ..> "edge_tts.Communicate"     : <<instantiates>>
+TextToSpeechService ..> "asyncio"                  : <<uses>>
+TextToSpeechService ..> "output.mp3"               : <<writes>>
+"edge_tts.Communicate" ..> "Microsoft Edge TTS API" : <<HTTP stream>>
+
+@enduml

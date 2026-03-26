@@ -8,73 +8,11 @@ import os
 import re
 import sqlite3
 import pprint
-import row_adder
+from building_phase import row_adder
 import sqlite_vec
 from sklearn.decomposition import PCA
 import joblib
-import db_query_handler
-
-
-class Recipe:
-    def __init__(
-        self,
-        id=None,
-        name=None,
-        ingredients=None,
-        preparation=None,
-        meal_type=None,
-        main_ingredient=None,
-        nationality=None,
-        vegetarian=False,
-        vegan=False,
-        gluten_free=False,
-        dairy_free=False,
-        nut_free=False,
-        high_fiber=False,
-        weight_loss_diet=False,
-        muscle_gain_bulking=False,
-        balanced_healthy=False,
-        carb_score=0.0,
-        protein_score=0.0,
-        fat_score=0.0,
-        calorie_score=0.0,
-        sugar_score=0.0,
-        spice_level_score=0.0,
-        preparation_time_score=0.0,
-        preparation_difficulty_score=0.0,
-        meal_class=None,
-    ):
-        self.id = id
-        self.name = name
-        self.ingredients = ingredients
-        self.preparation = preparation
-        self.meal_type = meal_type
-        self.main_ingredient = main_ingredient
-        self.nationality = nationality
-        self.vegetarian = vegetarian
-        self.vegan = vegan
-        self.gluten_free = gluten_free
-        self.dairy_free = dairy_free
-        self.nut_free = nut_free
-        self.high_fiber = high_fiber
-        self.weight_loss_diet = weight_loss_diet
-        self.muscle_gain_bulking = muscle_gain_bulking
-        self.balanced_healthy = balanced_healthy
-        self.carb_score = carb_score
-        self.protein_score = protein_score
-        self.fat_score = fat_score
-        self.calorie_score = calorie_score
-        self.sugar_score = sugar_score
-        self.spice_level_score = spice_level_score
-        self.preparation_time_score = preparation_time_score
-        self.preparation_difficulty_score = preparation_difficulty_score
-        self.meal_class = meal_class
-        self.preparation_and_cooking_suggestion = (None,)
-        self.serving_suggestion = (None,)
-        self.safe_keeping_suggestion = (None,)
-
-        self.current_step = ""
-        self.recipe = None
+from database_utils import db_query_handler
 
 
 class Chat:
@@ -420,8 +358,21 @@ class AIUtils:
             )
 
         else:
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY",
+                    allowed_function_names=[
+                        tool["name"] for tool in self.get_tool_functions()
+                    ],
+                )
+            )
+
             config = types.GenerateContentConfig(
-                tools=[tools], top_p=top_p, top_k=top_k, temperature=temperature
+                tools=[tools],
+                top_p=top_p,
+                top_k=top_k,
+                temperature=temperature,
+                tool_config=tool_config,
             )
 
         prompt_parts = []
@@ -442,6 +393,7 @@ class AIUtils:
                 response = self._get_response(prompt_parts, config, client)
         except Exception as e:
             print(e)
+            print("Failed to get response from AI.")
             return None
 
         if (
@@ -664,7 +616,7 @@ class AIUtils:
             }
 
         elif build_type == "query":
-            db = sqlite3.connect("recipes.db")
+            db = sqlite3.connect("database_utils/recipes.db")
 
             db.enable_load_extension(True)
             sqlite_vec.load(db)
@@ -884,14 +836,14 @@ class AIUtils:
             }
         elif build_type == "decide_intent":
 
-            db = sqlite3.connect("recipes.db")
+            db = sqlite3.connect("database_utils/recipes.db")
 
             db.enable_load_extension(True)
             sqlite_vec.load(db)
             db.enable_load_extension(False)
             cursor = db.cursor()
             table_sql = None
-            with sqlite3.connect("recipes.db") as conn:
+            with sqlite3.connect("database_utils/recipes.db") as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
                 result = cursor.fetchone()
@@ -1023,10 +975,10 @@ class AIUtils:
 
         elif build_type == "talk":
             instruction = f"""
-                You are a virtual chef that provides helpful and friendly responses to users based on their input and chat history.
+                You are a virtual chef , whose name is Bono, that provides helpful, friendly, simple, and straight-forward responses to users based on their input and chat history.
                 You are expected to perform RAG and not to use prior knowledge when offering user recipe(s).
                 You can use additional information like kitchen table image (if provided) within the user prompt {f" and {generic_parameter}" if generic_parameter else ""} if needed.
-                Your responses should be informative, engaging, and tailored to the user's needs and preferences.
+                Your responses should be informative and tailored to the user's needs and preferences.
                 Give a human friendly response to the user input. If the user input is a question, provide a clear and concise answer. If the user input is a statement, provide a relevant and engaging response.
                 Do not answers questions that does not relate to the ones that a chef would known or do, such as questions about sports, politics, celebrities, etc. If the user asks a question that does not relate to cooking or kitchen management, respond with "I'm here to help with cooking and kitchen-related questions. How can I assist you today?".
                 Useful feedback: Do not write a query or something that is not human friendly.
@@ -1274,7 +1226,7 @@ class AIUtils:
 
     def set_embeddings(self, key_index=0):
 
-        db = sqlite3.connect("recipes.db")
+        db = sqlite3.connect("database_utils/recipes.db")
         import sqlite_vec
 
         db.enable_load_extension(True)
@@ -1333,7 +1285,7 @@ class AIUtils:
             .values
             for text in texts
         ]
-        pca = joblib.load("pca_model.joblib")
+        pca = joblib.load("ai_logic/pca_model.joblib")
 
         return pca.transform(embeddings)[0] if pca else embeddings
 
@@ -1375,13 +1327,24 @@ class AIUtils:
 
         generate_sql = {
             "name": "generate_sql",
-            "description": "Generates an SQL query to retrieve recipes based on a user's natural language request.",
+            "description": (
+                "Generates an SQL query to retrieve recipes based on a user's natural language request. "
+                "Use this function to translate user prompts about recipes, ingredients, meal types, or dietary preferences into SQL queries. "
+                "Examples: 'Find me vegetarian recipes with high spice level', 'Show me recipes suitable for dinner', "
+                "'Show me recipes that have the ingredient on my kitchen table', 'Show me recipes like the ones on my kitchen table'."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_request": {
                         "type": "string",
-                        "description": "The user's request for generating an SQL query in natural language, e.g. 'Find me vegetarian recipes with high spice level', 'Show me the recipes that are suitable for dinner.', 'Show me the recipes that has the ingredient on my kitchen table', ' Show me the type of recipes like the one(s) on my kitchen table'",
+                        "description": (
+                            "The user's request for generating an SQL query in natural language. "
+                            "Examples: 'Find me vegetarian recipes with high spice level', "
+                            "'Show me recipes suitable for dinner', "
+                            "'Show me recipes that have the ingredient on my kitchen table', "
+                            "'Show me recipes like the ones on my kitchen table'."
+                        ),
                     },
                 },
                 "required": ["user_request"],
@@ -1390,13 +1353,21 @@ class AIUtils:
 
         select_recipe = {
             "name": "select_recipe",
-            "description": " select a recipe name based on a user's natural language request. E.g. 'I want a Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Select the recipe that is suitable for dinner and has high spice level.', 'Beef Brocolli Wellington sounds nice.'",
+            "description": (
+                "Selects a recipe name based on a user's natural language request. "
+                "Use this function when the user specifies or refers to a particular recipe by name or by context from previous results. "
+                "Examples: 'I want an Old Italian Lasagna', 'Let's go with the first recipe in the query result', "
+                "'Select the recipe suitable for dinner and with high spice level', 'Beef Broccoli Wellington sounds nice.'"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "recipe_name": {
                         "type": "string",
-                        "description": "The exact name of the recipe to select based on natural language, e.g. 'Old Italian Lasagna', 'Mexican Pizza', 'Beef-Brocolli Wellington'",
+                        "description": (
+                            "The exact name of the recipe to select, as specified or implied by the user. "
+                            "Examples: 'Old Italian Lasagna', 'Mexican Pizza', 'Beef Broccoli Wellington'."
+                        ),
                     },
                 },
                 "required": ["recipe_name"],
@@ -1405,59 +1376,53 @@ class AIUtils:
 
         follow_preparation = {
             "name": "follow_preparation",
-            "description": "Continue with the preparation of a selected recipe. E.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
+            "description": (
+                "Continues with the preparation of a selected recipe. "
+                "Use this function to guide the user through recipe steps, ingredients, or preparation details. "
+                "Examples: 'Show me the next step', 'What ingredients do I need for the second step?', "
+                "'Can you explain how to prepare the sauce?'."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    # "user_request": {
-                    #    "type": "string",
-                    #    "description": "The user's for continuing preparation of a selected recipe in natural language, e.g. 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?'",
-                    # },
+                    # No parameters currently required, but can be extended for step-specific requests.
                 },
-                # "required": ["user_request"],
+                # No required parameters.
             },
         }
 
         respond_to_user = {
             "name": "respond_to_user",
-            "description": "Casually talkt to the user based on the user input, chat history, kitchen image.",
+            "description": (
+                "Engages in a natural, conversational response to any user query or statement, regardless of topic. "
+                "This includes casual questions, observations, or ambiguous requests related to cooking, kitchen items, or general conversation. "
+                "Examples: 'What is on my kitchen table?', 'How does my dish look?', 'Do you think this dish would be delicious?', "
+                "or any other open-ended or unclear user input."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_input": {
                         "type": "string",
-                        "description": "The user's input in natural language, e.g. 'How are you today ?', 'How does my dish look ?', 'Do you think this dish would be delicious ?', ' I want to ... (unidentifiable input)', ",
+                        "description": (
+                            "The user's input in natural language. "
+                            "Examples: 'How are you today?', 'How does my dish look?', "
+                            "'Do you think this dish would be delicious?', 'I want to ... (unidentifiable input)'."
+                        ),
                     },
                 },
                 "required": ["user_input"],
             },
         }
 
+        # Return the list of function declarations
         return [generate_sql, select_recipe, follow_preparation, respond_to_user]
-
-        def init_recipe(self, recipe_name):
-            recipe_name = generic_parameter[0]
-
-            query = f"""
-            SELECT * FROM recipe WHERE recipe.name = '{recipe_name}'
-            """
-
-            recipe_info = db_query_handler.Database.execute_query(query)
-
-            self.recipe = Recipe(
-                id=recipe_info[0][0],
-                name=recipe_info[0][1],
-                ingredients=recipe_info[0][2],
-                instructions=recipe_info[0][3],
-                meal_type=recipe_info[0][4],
-                main_ingredient=recipe_info[0][5],
-            )
 
     def talk_to_ai(self, user_input, chat, image_path=None, generic_parameter=None):
         prompt = []
         prompt.append(self.to_gemini_text(user_input))
         if image_path:
-            prompt.append(self.to_gemini_text("Image of the kitchen table:"))
+            prompt.append(self.to_gemini_text("Current view of the kitchen table:"))
             prompt.append(self.to_gemini_image(image_path))
 
         response = self._ask(

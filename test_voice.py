@@ -6,12 +6,14 @@ import asyncio
 import soundfile as sf
 import numpy as np
 
+
 def record_audio(filename="input.wav", duration=5, fs=16000):
     print("Konuş...")
     recording = sd.rec(int(duration * fs), samplerate=fs, channels=1)
     sd.wait()
     write(filename, fs, recording)
     print("Kayıt tamam.")
+
 
 def speech_to_text(filename="input.wav"):
     print("Model yükleniyor...")
@@ -36,11 +38,13 @@ def speech_to_text(filename="input.wav"):
     print("Algılanan:", text)
     return text
 
+
 async def text_to_speech(text):
     print("Ses oluşturuluyor...")
     communicate = edge_tts.Communicate(text, "tr-TR-AhmetNeural")
     await communicate.save("output.mp3")
     print("Ses dosyası oluşturuldu: output.mp3")
+
 
 def main():
     record_audio()
@@ -50,6 +54,7 @@ def main():
         text = "Seni anlayamadım"
 
     asyncio.run(text_to_speech(text))
+
 
 if __name__ == "__main__":
     main()

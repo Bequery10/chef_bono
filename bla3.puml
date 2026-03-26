@@ -1,0 +1,60 @@
+@startuml BasicInterface
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor White
+    BorderColor #2E75B6
+    HeaderBackgroundColor #D6E4F0
+    FontName Arial
+}
+
+class BasicInterface {
+    - root           : tk.Tk
+    - title_label    : tk.Label
+    - button_frame   : tk.Frame
+    - continue_btn   : tk.Button
+    - stop_btn       : tk.Button
+    - restart_btn    : tk.Button
+    - exit_btn       : tk.Button
+    --
+    + __init__() : None
+    + run() : None
+    + on_continue() : None
+    + on_stop() : None
+    + on_restart() : None
+    + on_exit() : None
+    + select_recipe_manually() : None
+    + display_image_category(category: str) : None
+}
+
+
+note right of BasicInterface::select_recipe_manually
+  <<stub>>
+  Phase 2 — not yet implemented
+end note
+
+note right of BasicInterface::display_image_category
+  <<stub>>
+  Phase 2 — not yet implemented
+end note
+
+note right of BasicInterface::on_restart
+  Calls root.destroy()
+  then __init__() + run()
+end note
+
+class "tk.Tk" <<stdlib>> {
+}
+
+class "tk.Label" <<stdlib>> {
+}
+
+class "tk.Frame" <<stdlib>> {
+}
+
+class "tk.Button" <<stdlib>> {
+}
+
+BasicInterface *-- "tk.Tk"        : root
+BasicInterface *-- "tk.Label"     : title_label
+BasicInterface *-- "tk.Frame"     : button_fram

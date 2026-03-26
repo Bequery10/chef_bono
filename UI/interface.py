@@ -1,4 +1,5 @@
 import tkinter as tk
+from ai_logic import AIUtils
 
 
 class BasicInterface:
@@ -7,7 +8,6 @@ class BasicInterface:
         self.root.title("Chef Bono")
         self.root.geometry("400x400")  # Make the window bigger
         self.root.configure(bg="black")  # Set background color to pitch black
-
         # Title Label
         self.title_label = tk.Label(
             self.root,
@@ -88,6 +88,12 @@ class BasicInterface:
 
     def run(self):
         self.root.mainloop()
+
+    def select_recipe_manually(self):
+        break
+
+    def display_image_category(self, category):
+        break
 
 
 if __name__ == "__main__":

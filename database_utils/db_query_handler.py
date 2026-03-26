@@ -1,6 +1,6 @@
 import sqlite3
 import sqlite_vec
-import read_database
+from database_utils import read_database
 
 
 class Database:

@@ -1,7 +1,6 @@
 import sqlite3
 import sqlite_vec
 import os
-
 import struct
 
 

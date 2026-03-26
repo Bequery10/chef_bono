@@ -1,0 +1,194 @@
+@startuml AI_Logic_ClassDiagram
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle Bold
+skinparam classBackgroundColor #EEF4FB
+skinparam classBorderColor #2E75B6
+skinparam classHeaderBackgroundColor #2E75B6
+skinparam classHeaderFontColor #FFFFFF
+skinparam ArrowColor #2E75B6
+skinparam linetype ortho
+hide empty members
+
+' ─────────────────────────────────────────────
+'  CORE CLASSES
+' ─────────────────────────────────────────────
+
+class Chat {
+  - input_token_limit  : int
+  - output_token_limit : int
+  - context_window_limit : int
+  - chat_history : list[tuple[str, list[types.Part]]]
+  - started : bool
+  --
+  - __init__(input_token_limit, output_token_limit,\n  context_window_limit, history=None)
+  - _update_chat_history(prompt, output) : None
+  - _pop_convo() : None
+  - _is_list_of_parts(obj) : bool
+}
+
+class AIUtils {
+  - client : genai.Client
+  - model : Model
+  - input_token_limit : int
+  - output_token_limit : int
+  - context_window_limit : int
+  - start_time : float
+  - waiting_time : int
+  - started : bool
+  - chat : Chat
+  --
+  ' A) Initialization / Timing
+  + __init__(model_name : str = "gemini-2.5-flash-lite")
+  - _init_gemini(name, key_index : int = 0) : (Client, Model)
+  - _start_timer() : None
+  - _get_time() : float
+  - _start() : None
+  ..
+  ' B) Token Counting & Context Management
+  - _estimate_image_token_cost(image_data : bytes, mime_type : str) : int
+  - _get_token_count(prompt : list[types.Part]) : int
+  - _check_for_exceptions(prompt) : bool
+  - _check_context_window_limit(prompt_parts, chat : Chat) : bool
+  - _shrink_chat_history(chat : Chat, prompt, instruction) : None
+  ..
+  ' C) Gemini Request Building & Execution
+  - _get_config(instruction, schema, temperature, top_k, top_p) : GenerateContentConfig
+  - _get_response(prompt, config, client) : Response
+  - _fix_exceptions(e) : bool
+  - _ask(prompt, chat : Chat, build_type, temperature,\n  top_p, top_k, generic_parameter, client, tools) : object
+  - _ask_and_check(prompt, chat : Chat, build_type,\n  temperature, top_p, top_k, generic_parameter) : object
+  ..
+  ' D) Build Types
+  - _get_build(build_type : str, generic_parameter) : (str | None, dict | None)
+  ..
+  ' E) Agent Evaluation
+  - _agent_check(previous_instruction, chat_history, outputs) : (float, str)
+  - _get_new_chat() : Chat
+  ..
+  ' F) Application Features
+  - _add_flags(prompt) : list
+  - _analyze_kitchen_image(analysis_focus, key_index : int = 2) : object
+  + get_intended_function_and_argument(user_input, embedding,\n  image_path, chat : Chat = None) : (str, dict) | object | None
+  + generate_sql_query(user_input, db_path) : str
+  ..
+  ' G) Converters / Embeddings / SQL
+  + to_gemini_text(obj) : types.Part
+  + to_gemini_image(image_path) : types.Part | None
+  + set_embeddings(key_index : int = 0) : None
+  + get_embeddings(texts, key_index : int = 1) : ndarray
+  + build_query(response : dict, embedding) : str
+  + get_tool_functions() : list[dict]
+  ..
+  ' H) Conversational Wrappers
+  + talk_to_ai(user_input, chat : Chat, image_path, generic_parameter) : (str, bool)
+  + follow_preparation(user_input, chat : Chat,\n  image_path, generic_parameter) : (str, bool)
+  + get_steps(recipe_name, ingredients, preparation) : list[str]
+}
+
+' ─────────────────────────────────────────────
+'  EXTERNAL DEPENDENCIES
+' ─────────────────────────────────────────────
+
+class "google.genai.Client" as GenaiClient {
+  + models.generate_content(...)
+  + models.count_tokens(...)
+  + models.list(...)
+}
+
+class "google.genai.types.Part" as GenaiPart {
+  + from_text(text : str) : Part
+  + from_bytes(data, mime_type) : Part
+}
+
+class "google.genai.types.GenerateContentConfig" as GenaiConfig {
+  + safety_settings
+  + response_mime_type
+  + system_instruction
+  + response_schema
+  + max_output_tokens
+}
+
+class "google.genai.types.SafetySetting" as SafetySetting {}
+
+class "google.genai.types.Tool" as GenaiTool {
+  + function_declarations : list
+}
+
+class "sqlite3" as SQLite {
+  + connect(db_path) : Connection
+  + Cursor.execute(query)
+}
+
+class "sqlite_vec" as SQLiteVec {
+  + load_extension(...)
+}
+
+class "sklearn.decomposition.PCA" as PCA {
+  + fit_transform(X) : ndarray
+  + transform(X) : ndarray
+}
+
+class "joblib" as Joblib {
+  + dump(model, path)
+  + load(path) : object
+}
+
+class "database_utils.row_adder" as RowAdder {
+  + serialize_f32(vec) : bytes
+}
+
+class "PIL.Image" as PILImage {
+  + open(fp) : Image
+  + Image.size : (int, int)
+}
+
+class "dotenv / os" as Dotenv {
+  + load_dotenv()
+  + getenv(key) : str
+}
+
+class "time" as Time {
+  + time() : float
+  + sleep(secs)
+}
+
+class "json" as Json {
+  + loads(s) : dict
+  + dumps(obj) : str
+}
+
+' ─────────────────────────────────────────────
+'  RELATIONSHIPS
+' ─────────────────────────────────────────────
+
+' AIUtils <-> Chat
+AIUtils *-- Chat : composition\n(self.chat)
+AIUtils ..> Chat : <<creates>>\n_get_new_chat()
+AIUtils --> Chat : association\n(parameter in _ask,\ntalk_to_ai, etc.)
+
+' Chat internals
+Chat o-- GenaiPart : aggregates\nchat_history entries
+Chat ..> GenaiPart : <<uses>>\n_update_chat_history()
+
+' AIUtils -> google.genai
+AIUtils ..> GenaiClient    : <<uses>>\n_init_gemini() / _get_response()
+AIUtils ..> GenaiPart      : <<creates>>\nto_gemini_text() / to_gemini_image()
+AIUtils ..> GenaiConfig    : <<creates>>\n_get_config()
+AIUtils ..> SafetySetting  : <<uses>>\n_get_config()
+AIUtils ..> GenaiTool      : <<uses>>\nget_intended_function_and_argument()
+
+' AIUtils -> persistence / search
+AIUtils ..> SQLite    : <<uses>>\n_get_build() / set_embeddings()
+AIUtils ..> SQLiteVec : <<uses>>\nvector search extension
+AIUtils ..> PCA       : <<uses>>\nset_embeddings() / get_embeddings()
+AIUtils ..> Joblib    : <<uses>>\nsave / load PCA model
+AIUtils ..> RowAdder  : <<uses>>\nserialize_f32()
+
+' AIUtils -> utilities
+AIUtils ..> PILImage : <<uses>>\n_estimate_image_token_cost()
+AIUtils ..> Dotenv   : <<uses>>\n_init_gemini()
+AIUtils ..> Time     : <<uses>>\ntimer / backoff
+AIUtils ..> Json     : <<uses>>\n_fix_exceptions()
+
+@enduml

@@ -1,14 +1,14 @@
 import os
 import re
-import ai_utils
-import db_query_handler
+from ai_logic import ai_utils
+from database_utils import db_query_handler
 import pprint
 import time
 import json
-import recipe_manager
+from recipe import recipe_manager
 
 if __name__ == "__main__":
-    database = db_query_handler.Database("recipes.db")
+    database = db_query_handler.Database("database_utils/recipes.db")
     model = ai_utils.AIUtils()
     mode = 2
     if mode == 0:
@@ -40,18 +40,25 @@ if __name__ == "__main__":
                 print("Failed to execute the query.")
 
     elif mode == 2:
-        print("Enter your prompt:")
+        print("Welcome, I am chef Bono !")
         keep_convo_alive = True
         chat = model._get_new_chat()
         recipe = None
         while keep_convo_alive:
             prompt = input()
-            function_to_call, function_args = model.get_intended_function_and_argument(
-                user_input=prompt,
-                embedding=model.get_embeddings(prompt),
-                image_path="/Users/berkan/Desktop/Projects/chef_bono/current_frame.jpg",
-                chat=chat,
-            )
+            function_to_call, function_args = None, None
+            try:
+                function_to_call, function_args = (
+                    model.get_intended_function_and_argument(
+                        user_input=prompt,
+                        embedding=model.get_embeddings(prompt),
+                        image_path="/Users/berkan/Desktop/Projects/chef_bono/recording_utils/brocolli.png",
+                        chat=chat,
+                    )
+                )
+            except Exception as e:
+                print(f"Error determining function to call: {e}")
+                continue
 
             if function_to_call == "generate_sql":
                 query = model.generate_sql_query(
@@ -129,8 +136,10 @@ if __name__ == "__main__":
                 print(chefs_reponse)
 
             elif function_to_call == "respond_to_user":
+                user_input = function_args["user_input"]
                 chefs_reponse, keep_convo_alive = model.talk_to_ai(
-                    user_input=user_input, chat=chat
+                    user_input=user_input,
+                    chat=chat,
+                    image_path="/Users/berkan/Desktop/Projects/chef_bono/recording_utils/brocolli.png",
                 )
-
                 print(chefs_reponse)

@@ -1,0 +1,67 @@
+@startuml Section3_4_Overview
+
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor White
+    BorderColor #2E75B6
+    HeaderBackgroundColor #D6E4F0
+    FontName Arial
+}
+
+class Database {
+    - db_path : str
+    --
+    + execute_query(query, params) : list | None
+    + get_recipe(recipe_name) : dict
+}
+
+class Recipe {
+    - name : str
+    - ingredients : str
+    - preparation : str
+    - meal_type : str
+    - vegetarian : bool
+    - vegan : bool
+    - carb_score : float
+    - protein_score : float
+    - steps : list
+    ... 20 more attributes ...
+}
+
+class "build()" <<factory>> {
+    + build(query_result: dict) : Recipe
+}
+
+class "get_steps()" <<function>> {
+    + get_steps(recipe: Recipe) : list
+}
+
+class "row_adder" <<module>> {
+    + serialize_f32(vector) : bytes
+    + _save_to_database(recipes) : None
+    + _recipe_categorizer(recipes) : None
+}
+
+class "ai_logic.AIUtils" <<internal>> {
+    + _add_flags(recipes) : list
+    + set_embeddings() : None
+    + get_steps(name, ingredients, prep) : list
+}
+
+class "recipes" <<table>> {
+}
+
+class "recipes_vec" <<table>> {
+}
+
+Database       ..>  "build()"          : <<provides dict>>
+"build()"      ..>  Recipe             : <<creates>>
+"build()"      ..>  "get_steps()"      : <<calls>>
+"get_steps()"  ..>  "ai_logic.AIUtils" : <<uses>>
+"row_adder"    ..>  "ai_logic.AIUtils" : <<uses>>
+"row_adder"    ..>  "recipes"          : <<inserts>>
+"row_adder"    ..>  "recipes_vec"      : <<inserts>>
+Database       ..>  "recipes"          : <<reads>>
+Database       ..>  "recipes_vec"      : <<reads>>
+
+@enduml

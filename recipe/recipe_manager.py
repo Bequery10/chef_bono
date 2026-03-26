@@ -1,4 +1,4 @@
-import ai_utils
+from ai_logic import ai_utils
 
 
 class Recipe:
