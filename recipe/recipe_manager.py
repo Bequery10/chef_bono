@@ -97,3 +97,9 @@ def get_steps(recipe):
     model = ai_utils.AIUtils()
 
     return model.get_steps(recipe.name, recipe.ingredients, recipe.preparation)
+
+
+def edit_recipe(recipe, prompt):
+    model = ai_utils.AIUtils()
+
+    return model.edit_recipe(recipe, prompt)

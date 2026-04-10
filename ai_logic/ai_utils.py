@@ -974,24 +974,16 @@ class AIUtils:
                 }
 
         elif build_type == "talk":
-            instruction = f"""
-                You are a virtual chef , whose name is Bono, that provides helpful, friendly, simple, and straight-forward responses to users based on their input and chat history.
-                You are expected to perform RAG and not to use prior knowledge when offering user recipe(s).
-                You can use additional information like kitchen table image (if provided) within the user prompt {f" and {generic_parameter}" if generic_parameter else ""} if needed.
-                Your responses should be informative and tailored to the user's needs and preferences.
-                Give a human friendly response to the user input. If the user input is a question, provide a clear and concise answer. If the user input is a statement, provide a relevant and engaging response.
-                Do not answers questions that does not relate to the ones that a chef would known or do, such as questions about sports, politics, celebrities, etc. If the user asks a question that does not relate to cooking or kitchen management, respond with "I'm here to help with cooking and kitchen-related questions. How can I assist you today?".
-                Useful feedback: Do not write a query or something that is not human friendly.
-                Use json schema to provide your response with the following key:
-                - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
-            """
 
             instruction = f"""
-                You're a virtual chef. Keep convos fun and short as possible.
+                You're a virtual chef, named Bono. Keep convos as informative and short as possible.
                 Use json schema to provide your response with the following key:
                 - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
                 - keep_convo_alive: a boolean that indicates whether the response should include a question or a statement that encourages the user to continue the conversation.
             """
+
+            if generic_parameter and generic_parameter[0]:
+                instruction += f"\nThese are the possible recipe options. They are queried from the database and provided to you to perform RAG as you form your answer:{generic_parameter[0]}"
 
             schema = {
                 "type": "object",
@@ -1043,6 +1035,38 @@ class AIUtils:
                     },
                 },
                 "required": ["cooking&preparation_steps"],
+            }
+
+        elif build_type == "edit_recipe":
+            instruction = f"""
+                You are an expert that will get recipe information and edit the recipe based on the user input.
+                Following this schema:
+                    - ingredients: a strings that contains the ingredients of the recipe.
+                    - preparation: a strings that contains the preparation steps of the recipe.
+                    - steps: an array of strings that contains the cooking steps of the recipe.
+                    - main_ingredient: a string that contains the main ingredient of the recipe. It should be straightforward and conventional like "chicken", "beef", "cucumber", "potato", etc.
+                    - keep_convo_alive: a boolean that indicates whether the response should include a question or a statement that encourages the user to continue the conversation.
+            """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "ingredients": {"type": "string"},
+                    "preparation": {"type": "string"},
+                    "steps": {"type": "array", "items": {"type": "string"}},
+                    "main_ingredient": {"type": "string"},
+                    "keep_convo_alive": {
+                        "type": "boolean",
+                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversation.",
+                    },
+                },
+                "required": [
+                    "ingredients",
+                    "preparation",
+                    "steps",
+                    "main_ingredient",
+                    "keep_convo_alive",
+                ],
             }
 
         return instruction, schema
@@ -1110,7 +1134,7 @@ class AIUtils:
             response[i] = insert_dict_at_index(recipe, 0, "embedding", [0.0] * 256)
         return response
 
-    def _analyze_kitchen_image(self, analysis_focus, key_index=2):
+    def _analyze_kitchen_image(self, analysis_focus, key_index=1):
         """Analyzes a kitchen image based on the provided focus."""
 
         prompt = []
@@ -1354,23 +1378,30 @@ class AIUtils:
         select_recipe = {
             "name": "select_recipe",
             "description": (
-                "Selects a recipe name based on a user's natural language request. "
-                "Use this function when the user specifies or refers to a particular recipe by name or by context from previous results. "
-                "Examples: 'I want an Old Italian Lasagna', 'Let's go with the first recipe in the query result', "
+                "Selects a recipe based on a user's natural language request. "
+                "Use this function when the user specifies or refers to a particular recipe by name or by context from previous results. Make sure not to re-select the same recipe that is already selected in the previous conversation turns. "
+                "Examples: 'I want an Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Beef Broccoli Wellington sounds nice.', 'yes', 'sure', 'let's go with that', 'sounds good'."
                 "'Select the recipe suitable for dinner and with high spice level', 'Beef Broccoli Wellington sounds nice.'"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "recipe_id": {
+                        "type": "number",
+                        "description": (
+                            "The exact id of the recipe to select, as specified or implied by the system prompt. "
+                            "Examples: name: 'Beef Broccoli Wellington', id: '15' so choose '15', name: 'Spicy Thai Noodles', id: '26' so choose '26', name: 'Classic Beef Lasagna', id: '4' so choose '4' so choose '4'."
+                        ),
+                    },
                     "recipe_name": {
                         "type": "string",
                         "description": (
-                            "The exact name of the recipe to select, as specified or implied by the user. "
-                            "Examples: 'Old Italian Lasagna', 'Mexican Pizza', 'Beef Broccoli Wellington'."
+                            "The exact name of the recipe to select, as specified or implied by the system prompt. "
+                            "Examples: 'Old Italian Lasagna', 'Beef Broccoli Wellington', 'Spicy Thai Noodles'."
                         ),
                     },
                 },
-                "required": ["recipe_name"],
+                "required": ["recipe_id", "recipe_name"],
             },
         }
 
@@ -1378,8 +1409,9 @@ class AIUtils:
             "name": "follow_preparation",
             "description": (
                 "Continues with the preparation of a selected recipe. "
+                "This function should be called after getting a go for the response: 'Great choice! You have selected the recipe: 'recipe_name'. Let me provide you with the cooking/prepearing instructions and details for this recipe, If you wish.' from the user."
                 "Use this function to guide the user through recipe steps, ingredients, or preparation details. "
-                "Examples: 'Show me the next step', 'What ingredients do I need for the second step?', "
+                "Examples: 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?', 'yes', 'let's start cooking', 'I'm ready', 'go ahead'."
                 "'Can you explain how to prepare the sauce?'."
             ),
             "parameters": {
@@ -1402,21 +1434,43 @@ class AIUtils:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_input": {
+                    "response": {
                         "type": "string",
                         "description": (
-                            "The user's input in natural language. "
-                            "Examples: 'How are you today?', 'How does my dish look?', "
-                            "'Do you think this dish would be delicious?', 'I want to ... (unidentifiable input)'."
+                            "A response in natural language to the user's input, which may be a casual question, observation, or ambiguous statement. "
+                            "Examples: 'I am doing great, how are you ?', 'Your dish does look good!', "
+                            "'I think this dish will be delicious', 'Do you want to ... (unidentifiable input)'."
                         ),
                     },
                 },
-                "required": ["user_input"],
+                "required": ["response"],
             },
         }
 
+        edit_recipe = {
+            "name": "edit_recipe",
+            "description": (
+                "Edits the details of a selected recipe based on user input. "
+                "Use this function when the user wants to modify the recipe's ingredients, preparation steps, or other details. "
+                "Examples: 'I want to make this recipe vegan, what should I change?', 'Can you make this recipe gluten-free?', "
+                "'I don't have broccoli, can you suggest a substitute and update the recipe accordingly?'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    # Parameters for editing the recipe can be defined here based on expected user inputs for modifications.
+                },
+                # No required parameters currently, but can be extended as needed.
+            },
+        }
         # Return the list of function declarations
-        return [generate_sql, select_recipe, follow_preparation, respond_to_user]
+        return [
+            generate_sql,
+            select_recipe,
+            follow_preparation,
+            respond_to_user,
+            edit_recipe,
+        ]
 
     def talk_to_ai(self, user_input, chat, image_path=None, generic_parameter=None):
         prompt = []
@@ -1454,11 +1508,11 @@ class AIUtils:
             generic_parameter=generic_parameter,
         )
 
-        if not response or "chef's_response" not in response:
+        if not response or "cooking_instruction" not in response:
             print("Failed to get a response from the AI.")
             return None
 
-        return response["chef's_response"], response["keep_convo_alive"]
+        return response["cooking_instruction"], response["keep_convo_alive"]
 
     def get_steps(self, recipe_name, ingredients, preparation):
         prompt = []
@@ -1481,3 +1535,34 @@ class AIUtils:
             return None
 
         return response["cooking&preparation_steps"]
+
+    def edit_recipe(self, recipe, user_input):
+        prompt = []
+        prompt.append(
+            self.to_gemini_text(
+                "You need to edit the recipe based on the following prompt:"
+            )
+        )
+        prompt.append(self.to_gemini_text(user_input))
+        prompt.append(self.to_gemini_text("Here is the current recipe information:"))
+        prompt.append(self.to_gemini_text(f"Recipe name: {recipe.name}"))
+        prompt.append(self.to_gemini_text(f"Ingredients: {recipe.ingredients}"))
+        prompt.append(self.to_gemini_text(f"Preparation: {recipe.preparation}"))
+        prompt.append(self.to_gemini_text(f"Steps: {recipe.steps}"))
+
+        response = self._ask(
+            prompt=prompt,
+            chat=self._get_new_chat(),
+            build_type="edit_recipe",
+        )
+
+        if not response:
+            print("Failed to get a response from the AI.")
+            return None
+
+        return (
+            response["main_ingredient"],
+            response["ingredients"],
+            response["preparation"],
+            response["steps"],
+        ), response["keep_convo_alive"]

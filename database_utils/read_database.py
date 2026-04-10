@@ -26,7 +26,7 @@ def serialize_bytes(obj, key=None):
 def read_recipes():
     import sqlite_vec
 
-    conn = sqlite3.connect("recipes.db")
+    conn = sqlite3.connect("database_utils/recipes.db")
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
