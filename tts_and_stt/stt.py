@@ -3,7 +3,6 @@ import whisper
 import numpy as np
 import threading
 import queue
-
 import os
 
 brew_bin = "/opt/homebrew/bin"
@@ -13,46 +12,57 @@ if not current_path.startswith(brew_bin + ":"):
 
 import speech_recognition as sr
 
-
 # Thread-safe queue for audio chunks
 audio_queue = queue.Queue()
 response = ""
 processing_thread = None
+stop_recording = threading.Event()
+stop_processing = threading.Event()  # NEW: Signal to stop processing thread
 
 
 def audio_callback(indata, frames, time, status):
-    # indata shape: (frames, channels)
     audio_queue.put(indata.copy())
-
-
-stop_recording = threading.Event()
 
 
 def record_audio_stream(fs=16000, blocksize=16000):
     global stop_recording
-    stop_recording.clear()  # Reset flag
+    stop_recording.clear()
 
     with sd.InputStream(
         callback=audio_callback, channels=1, samplerate=fs, blocksize=blocksize
     ):
         print("Recording... Press Ctrl+C to stop.")
-        stop_recording.wait()  # Waits until stop_recording.set() is called
+        stop_recording.wait()
 
 
 def process_audio_stream(model):
+    global stop_processing
     try:
         print("Processing thread started.")
         speech_text = ""
-        while True:
-            audio_chunk = audio_queue.get()
+        while not stop_processing.is_set():  # FIX: Check stop signal
+            try:
+                # Use timeout to allow checking stop_processing
+                audio_chunk = audio_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
             audio_chunk = audio_chunk.flatten().astype(np.float32)
+
+            max_val = np.max(np.abs(audio_chunk))
+            if max_val < 0.01:
+                continue
+
+            audio_chunk = audio_chunk / max_val
+
             result = model.transcribe(audio_chunk, language="en", word_timestamps=True)
             speech_text = result["text"].strip()
-            # Check for no_speech_prob in the first segment
+
             if "segments" in result and result["segments"]:
                 no_speech_prob = result["segments"][0].get("no_speech_prob", 0)
                 if no_speech_prob > 0.5:
-                    continue  # Skip if likely no speech
+                    continue
+
             if "bono" in speech_text.lower():
                 print("Chef Bono detected in speech!\n")
                 speech_text = ""
@@ -60,9 +70,9 @@ def process_audio_stream(model):
 
     except Exception as e:
         print(f"Error in processing thread: {e}")
-        stop_recording.set()  # Signal main thread to stop on error
+        stop_recording.set()
     finally:
-        # Cleanup: clear the queue
+        # Cleanup
         while not audio_queue.empty():
             try:
                 audio_queue.get_nowait()
@@ -82,14 +92,10 @@ def listen_for_bono(stop_word="chef"):
 
         while True:
             try:
-                # phrase_time_limit keeps each capture short (prevents "forever recording")
                 audio = recognizer.listen(source, timeout=10, phrase_time_limit=6)
-
                 text = recognizer.recognize_google(audio)
-
                 normalized = text.lower()
 
-                # simplest match (substring)
                 if stop_word in normalized:
                     print(text)
                     print("Stop word detected. Exiting.")
@@ -113,11 +119,13 @@ def initialize_model():
 
 
 def listen(model):
-    global audio_queue, stop_recording, response, processing_thread
+    global audio_queue, stop_recording, response, processing_thread, stop_processing
 
-    # Reset global state before starting a new session
-    response = ""  # Clear previous response
+    # Reset global state
+    response = ""
     stop_recording.clear()
+    stop_processing.clear()  # FIX: Clear stop signal
+
     while not audio_queue.empty():
         try:
             audio_queue.get_nowait()
@@ -133,12 +141,10 @@ def listen(model):
     # Start recording (main thread blocks here)
     record_audio_stream()
 
+    # Signal processing thread to stop
+    stop_processing.set()  # FIX: Tell thread to exit
+
     # Give the processing thread a moment to finish
-    processing_thread.join(timeout=1)
+    processing_thread.join(timeout=2)
 
     return response
-
-
-if __name__ == "__main__":
-    stt_model = initialize_model()
-    listen(stt_model)

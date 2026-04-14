@@ -8,8 +8,13 @@ import json
 from recipe import recipe_manager
 from tts_and_stt import tts
 from tts_and_stt import stt
+import warnings
+import logging
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.ERROR)
+    warnings.filterwarnings("ignore", message=".*FP16 is not supported on CPU.*")
+
     database = db_query_handler.Database("database_utils/recipes.db")
     stt_model = stt.initialize_model()
     latest_query_result = None
@@ -30,7 +35,10 @@ if __name__ == "__main__":
                 chat=chat,
             )
         except Exception as e:
-            print(f"Error determining function to call: {e}")
+            logging.exception(
+                "Error determining function to call:"
+            )  # Logs with full traceback
+
             continue
 
         if function_to_call == "generate_sql":
@@ -119,8 +127,18 @@ if __name__ == "__main__":
 
             tts.play(chefs_reponse)
 
+        elif function_to_call == "edit_recipe":
+            change = function_args["changes_to_be_made"]
+            response = model.edit_recipe(
+                user_input=change,
+                recipe=recipe,
+            )
+            changes_made, main_ingredient, ingredients, preparation, steps = response[0]
+            keep_convo_alive = response[1]
+            tts.play(changes_made)
+            chat._update_chat_history(prompt, changes_made)
+
         elif function_to_call == "respond_to_user":
             chefs_reponse = function_args["response"]
-
             chat._update_chat_history(prompt, chefs_reponse)
             tts.play(chefs_reponse)

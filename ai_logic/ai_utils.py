@@ -13,6 +13,7 @@ import sqlite_vec
 from sklearn.decomposition import PCA
 import joblib
 from database_utils import db_query_handler
+import numpy as np
 
 
 class Chat:
@@ -243,7 +244,7 @@ class AIUtils:
         except Exception as e:
             print(f"An error occurred: {e}")
             if self._fix_exceptions(e):
-                return self._get_response(prompt, config)
+                return self._get_response(prompt, config, client)
 
             return None
 
@@ -1041,6 +1042,7 @@ class AIUtils:
             instruction = f"""
                 You are an expert that will get recipe information and edit the recipe based on the user input.
                 Following this schema:
+                    - changes_made: a string that contains the changes made to the recipe based on the user input.
                     - ingredients: a strings that contains the ingredients of the recipe.
                     - preparation: a strings that contains the preparation steps of the recipe.
                     - steps: an array of strings that contains the cooking steps of the recipe.
@@ -1051,6 +1053,7 @@ class AIUtils:
             schema = {
                 "type": "object",
                 "properties": {
+                    "changes_made": {"type": "string"},
                     "ingredients": {"type": "string"},
                     "preparation": {"type": "string"},
                     "steps": {"type": "array", "items": {"type": "string"}},
@@ -1061,6 +1064,7 @@ class AIUtils:
                     },
                 },
                 "required": [
+                    "changes_made",
                     "ingredients",
                     "preparation",
                     "steps",
@@ -1303,15 +1307,42 @@ class AIUtils:
 
     def get_embeddings(self, texts, key_index=1):
         model_name = "gemini-embedding-001"
-        embeddings = [
-            self.client.models.embed_content(model=model_name, contents=text)
-            .embeddings[0]
-            .values
-            for text in texts
-        ]
+        embeddings = []
+
+        for text in texts:
+            try:
+                embedding = (
+                    self.client.models.embed_content(model=model_name, contents=text)
+                    .embeddings[0]
+                    .values
+                )
+                embeddings.append(embedding)
+            except Exception as e:
+                print(f"Error getting embedding for text: {e}")
+                return None
+
+        if not embeddings:
+            print("No embeddings generated")
+            return None
+
+        # Convert to numpy array with explicit dtype to ensure proper 2D shape
+        embeddings_array = np.array(embeddings, dtype=float)
+
+        # Validate dimensions
+        if embeddings_array.ndim != 2:
+            print(f"Error: Expected 2D array, got {embeddings_array.ndim}D array")
+            return None
+
         pca = joblib.load("ai_logic/pca_model.joblib")
 
-        return pca.transform(embeddings)[0] if pca else embeddings
+        if pca is None:
+            return embeddings_array
+
+        transformed = pca.transform(embeddings_array)
+        print("Original embedding shape:", embeddings_array.shape)
+        print("Transformed embedding shape:", transformed.shape)
+        input()
+        return transformed[0] if len(texts) == 1 else transformed
 
     def build_query(self, response, embedding):
         query = ""
@@ -1458,9 +1489,15 @@ class AIUtils:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    # Parameters for editing the recipe can be defined here based on expected user inputs for modifications.
+                    "changes_to_be_made": {
+                        "type": "string",
+                        "description": (
+                            "The specific changes the user wants to make to the recipe. "
+                            "Examples: 'Make it vegan', 'Remove gluten', 'Substitute broccoli with cauliflower'."
+                        ),
+                    },
                 },
-                # No required parameters currently, but can be extended as needed.
+                "required": ["changes_to_be_made"],
             },
         }
         # Return the list of function declarations
@@ -1561,6 +1598,7 @@ class AIUtils:
             return None
 
         return (
+            response["changes_made"],
             response["main_ingredient"],
             response["ingredients"],
             response["preparation"],
