@@ -45,14 +45,13 @@ if __name__ == "__main__":
             query = model.generate_sql_query(
                 function_args["user_request"], database.db_path
             )
-            results = ""
             if query:
                 # tts.play(f"Generated SQL Query: {query}")
                 latest_query_result = database.execute_query(query)
-                if not results:
-                    print("Failed to execute the query.")
             else:
-                print("Failed to generate a SQL query.")
+                tts.play(
+                    "Couldn't find any recipes matching your request. Please try again with different criteria."
+                )
 
             if latest_query_result:
                 user_input = function_args["user_request"]
@@ -65,7 +64,7 @@ if __name__ == "__main__":
                     ],
                 )
 
-                tts.play(chefs_reponse)
+                tts.play(chefs_response)
 
         elif function_to_call == "select_recipe":
             recipe_id = int(function_args["recipe_id"])

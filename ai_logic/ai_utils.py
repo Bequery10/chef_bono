@@ -1339,9 +1339,9 @@ class AIUtils:
             return embeddings_array
 
         transformed = pca.transform(embeddings_array)
-        print("Original embedding shape:", embeddings_array.shape)
-        print("Transformed embedding shape:", transformed.shape)
-        input()
+        # print("Original embedding shape:", embeddings_array.shape)
+        # print("Transformed embedding shape:", transformed.shape)
+
         return transformed[0] if len(texts) == 1 else transformed
 
     def build_query(self, response, embedding):
