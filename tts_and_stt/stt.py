@@ -91,8 +91,11 @@ def process_audio_stream(model):
             result = model.transcribe(audio_chunk, language="en", word_timestamps=True)
             speech_text = result["text"].strip()
 
-            # if "segments" in result and result["segments"]:
-            #    no_speech_prob = result["segments"][0].get("no_speech_prob", 0)
+            if "segments" in result and result["segments"]:
+                no_speech_prob = result["segments"][0].get("no_speech_prob", 0)
+                if no_speech_prob > 0.8:
+                    print("No speech detected in segment, skipping...")
+                    continue
 
             if "bono" in speech_text.lower() or any(
                 map(
@@ -138,7 +141,7 @@ def listen_for_bono(stop_word="chef", model=None):
                 full_audio = full_audio.flatten().astype(np.float32)
 
                 max_val = np.max(np.abs(full_audio))
-                # print(f"Audio level: {max_val}")  # DEBUG: See audio levels
+                print(f"Audio level: {max_val}")  # DEBUG: See audio levels
 
                 if max_val > 0.01:
                     full_audio = full_audio / max_val

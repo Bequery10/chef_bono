@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Speech to Python</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+    <h1>Web Speech API → Python Bridge</h1>
+    <p>Controlled by Python. Listening starts automatically.</p>
+    
+    <p id="status">Status: Ready</p>
+
+    <script>
+        const socket = io();
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.language = 'en-US';
+
+        function startListening() {
+            document.getElementById('status').textContent = 'Status: Listening...';
+            recognition.start();
+        }
+
+        function stopListening() {
+            recognition.stop();
+            document.getElementById('status').textContent = 'Status: Stopped';
+        }
+
+        // Auto-start listening when page loads
+        window.addEventListener('load', () => {
+            startListening();
+        });
+
+        // Python can control listening via SocketIO
+        socket.on('start_listening', () => {
+            startListening();
+        });
+
+        socket.on('stop_listening', () => {
+            stopListening();
+        });
+
+        recognition.addEventListener('result', (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    const transcript = event.results[i][0].transcript;
+                    socket.emit('transcript', { text: transcript });
+                }
+            }
+        });
+
+        socket.on('bono_detected', (data) => {
+            document.getElementById('status').textContent = '✅ BONO DETECTED!';
+        });
+    </script>
+</html>

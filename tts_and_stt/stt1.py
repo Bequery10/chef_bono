@@ -1,38 +1,85 @@
+import subprocess
+import time
 import os
+import platform
+import warnings
+from tts_and_stt.web_api_app import (
+    get_latest_transcript,
+    start_listening_browser,
+    stop_listening_browser,
+)
 
-# Ensure Homebrew binaries (like `flac`) are found first
-brew_bin = "/opt/homebrew/bin"
-current_path = os.environ.get("PATH", "")
-if not current_path.startswith(brew_bin + ":"):
-    os.environ["PATH"] = f"{brew_bin}:{current_path}"
-
-import speech_recognition as sr
-
-
-def callback(recognizer, audio):
-    try:
-        text = recognizer.recognize_google(audio)
-        print("You said:", text)
-    except sr.UnknownValueError:
-        print("Could not understand audio")
-    except sr.RequestError as e:
-        print(f"Could not request results; {e}")
+warnings.filterwarnings("ignore")
 
 
-def main():
-    recognizer = sr.Recognizer()
-    mic = sr.Microphone()
-    with mic as source:
-        recognizer.adjust_for_ambient_noise(source)
-    print("Listening in the background... (Ctrl+C to exit)")
-    stop_listening = recognizer.listen_in_background(mic, callback)
+def get_speech():
+    speech = ""
+    start_time = time.time()
+    stop_listening = False
+    print(f"Latest transcript: {speech}")
+    while not stop_listening:
+        if speech:
+            start_time = time.time()
+            speech = get_latest_transcript()
+
+        elif time.time() - start_time > 5:
+            stop_to_listen()
+
+    return speech
+
+
+def is_bono_said():
+    command = get_latest_transcript()
+    print(f"bono ?: {command}")
+    return "bono" in command.lower()
+
+
+def listen():
+    start_listening_browser()
+
+    while not is_bono_said():
+        time.sleep(0.1)
+
+    return get_speech()
+
+
+def stop_to_listen():
+    stop_listening_browser()
+
+
+def start_flask_app():
+    os.system("lsof -ti:5001 | xargs kill -9 2>/dev/null || true")
+    time.sleep(1)
+    os.system("clear")
+
+    flask_process = subprocess.Popen(
+        ["python", "web_api_app.py"],
+        cwd="tts_and_stt",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        bufsize=1,
+    )
+
+    time.sleep(5)
+
+    if platform.system() == "Darwin":
+        subprocess.Popen(
+            [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "--user-data-dir=/tmp/chrome_temp_bono",
+                "--disable-sync",
+                "--no-first-run",
+                "http://127.0.0.1:5001",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    print("Listening for 'bono'...")
     try:
         while True:
-            pass  # Keep the main thread alive
+            time.sleep(0.1)
     except KeyboardInterrupt:
-        stop_listening(wait_for_stop=False)
-        print("Stopped.")
-
-
-if __name__ == "__main__":
-    main()
+        flask_process.terminate()
+        os.system("lsof -ti:5001 | xargs kill -9 2>/dev/null || true")
