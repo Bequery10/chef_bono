@@ -42,14 +42,19 @@
         });
 
         recognition.addEventListener('result', (event) => {
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                if (event.results[i].isFinal) {
-                    const transcript = event.results[i][0].transcript;
-                    socket.emit('transcript', { text: transcript });
-                }
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+                const transcript = event.results[i][0].transcript;
+                console.log('🎤 Sending transcript:', transcript);  // Debug
+                socket.emit('transcript', { text: transcript });
             }
-        });
+        }
+    });
 
+    recognition.addEventListener('error', (event) => {
+        console.error('❌ Speech Recognition Error:', event.error);
+        document.getElementById('status').textContent = '❌ Error: ' + event.error;
+    });
         socket.on('bono_detected', (data) => {
             document.getElementById('status').textContent = '✅ BONO DETECTED!';
         });
