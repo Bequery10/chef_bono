@@ -52,7 +52,7 @@ class Chat:
 
 class AIUtils:
 
-    def __init__(self, model_name="gemini-2.5-flash-lite"):
+    def __init__(self, model_name="gemini-3.1-flash-lite"):
 
         self.client, self.model = self._init_gemini(model_name, 0)
         self.input_token_limit = self.model.input_token_limit
@@ -66,8 +66,9 @@ class AIUtils:
             self.output_token_limit,
             self.context_window_limit,
         )
+        self.clients = [None] * 5
 
-    def _init_gemini(self, name, key_index=0):
+    def _init_gemini(self, name="gemini-3.1-flash-lite", key_index=0):
         load_dotenv()
         API_KEY = os.getenv("GOOGLE_API_KEY" + str(key_index))
 
@@ -82,6 +83,11 @@ class AIUtils:
                 break
 
         return client, model
+
+    def _get_client(self, key_index):
+        if self.clients[key_index] is None:
+            self.clients[key_index] = self._init_gemini(key_index=key_index)[0]
+        return self.clients[key_index]
 
     def _start_timer(self):  # start the timer
         self.start_time = time.time()
@@ -177,7 +183,7 @@ class AIUtils:
 
         else:
             print(f"An error occurred: {e}")
-            return False  # failsafe
+            return True  # failsafe
 
     def _get_config(
         self,
@@ -531,15 +537,21 @@ class AIUtils:
                 "Soft drink",
                 "Smoothie / shake",
             ]
+
+            meal_type = [
+                "Breakfast",
+                "Lunch",
+                "Dinner",
+            ]
+
             instruction = f"""
             You are an expert AI that provide values for the categories based on the recipes provided.
-            Analyze the recipes and for each provide an array of values of an integer category: meal_type, a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'spice_level_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
-            Use the following guidelines to determine the values:
-            For the integer category 'meal_type', provide 1 for breakfast, 2 for lunch, and 3 for dinner.
+            Analyze the recipes and for each provide an array of values of a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'spice_level_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
+            Use the followng guidelines to determine the values:
             For the string category 'main_ingredient', provide the primary ingredient used in the recipe. Make sure ingredient name is convential and straightforward like "chicken", "meat", "cucumber", "potato". For 'nationality', provide the cuisine type like "Italian", "Chinese", "Mexican", etc, if possible. If not possible, provide "Unknown". 
             For boolean categories, provide 'true' if the recipe fits the category, otherwise provide 'false'.
             For float categories, provide a score between 0 and 1 indicating how well the recipe provides the category.
-            For the enum category 'meal_class', choose only one from the following list that best fits the recipe: {meal_classes}
+            For the enum categories 'meal_class', choose only one from the following list that best fits the recipe: {meal_classes}, for the 'meal_type' category, choose only one from the following list: {meal_type}.
             Provide the output in a JSON array format where each element corresponds to a recipe with the specified properties.
             Make sure the array's elements are in the same order as the input recipes.
             """
@@ -550,9 +562,8 @@ class AIUtils:
                     "type": "object",
                     "properties": {
                         "meal_type": {
-                            "type": "number",
-                            "minimum": 1,
-                            "maximum": 3,
+                            "type": "string",
+                            "enum": meal_type,
                         },
                         "main_ingredient": {"type": "string"},
                         "nationality": {"type": "string"},
@@ -615,10 +626,102 @@ class AIUtils:
                     ],
                 },
             }
-
-        elif build_type == "query":
+        elif build_type == "query_by_tags":
             db = sqlite3.connect("database_utils/recipes.db")
+            db.enable_load_extension(True)
+            sqlite_vec.load(db)
+            db.enable_load_extension(False)
+            cursor = db.cursor()
+            table_sql = None
+            with sqlite3.connect(generic_parameter[0]) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
+                result = cursor.fetchone()
+                if result:
+                    table_sql = result[0]
 
+                instruction = f"""
+                    You are an expert AI that generates SQL queries to filter recipes by tags and attributes.
+                    Consider the given database structure: {table_sql}
+                    
+                    Based on the user's request, generate a query that filters recipes by:
+                    - Dietary preferences (vegetarian, vegan, gluten_free, dairy_free, nut_free)
+                    - Meal type (Breakfast, Lunch, Dinner)
+                    - Meal class (Pasta, Pizza, Salad, etc.)
+                    - Nutritional scores (carb, protein, fat, calorie, sugar, spice level)
+                    - Preparation difficulty and time
+                    
+                    Return recipe IDs and basic information. Focus on exact boolean and categorical matches.
+                    Use WHERE clauses to filter, and ORDER BY to sort by relevance scores if needed.
+                    
+                    IMPORTANT:
+                        - Only query the "recipes" table (no vector search)
+                        - There is only one table in this context: "recipes"
+                        - Make sure not to use MATCH or the recipes_vec table
+                """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "SELECT": {
+                        "type": "string",
+                        "enum": [
+                            "id, name, meal_type, meal_class, main_ingredient",
+                            "id, name, meal_type, meal_class, spice_level_score, preparation_difficulty_score",
+                            "*",
+                        ],
+                        "example": "id, name, meal_type, meal_class, main_ingredient",
+                    },
+                    "DISTINCT": {"type": "boolean", "example": False},
+                    "FROM": {
+                        "type": "string",
+                        "enum": ["recipes"],
+                        "example": "recipes",
+                    },
+                    "WHERE": {
+                        "type": "string",
+                        "example": "vegetarian = true AND meal_type = 'Lunch' AND meal_class = 'Pasta'",
+                    },
+                    "GROUP BY": {
+                        "type": "string",
+                        "enum": [
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "vegetarian",
+                            "vegan",
+                            "gluten_free",
+                            "dairy_free",
+                            "nut_free",
+                            "meal_class",
+                        ],
+                    },
+                    "ORDER BY": {
+                        "type": "string",
+                        "enum": [
+                            "spice_level_score",
+                            "preparation_difficulty_score",
+                            "preparation_time_score",
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                        ],
+                        "example": "spice_level_score",
+                    },
+                    "DESC": {"type": "boolean", "example": False},
+                    "LIMIT": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "example": 20,
+                    },
+                },
+                "required": ["SELECT", "FROM", "WHERE", "LIMIT"],
+            }
+
+        elif build_type == "query_by_vector_similarity":
+            db = sqlite3.connect("database_utils/recipes.db")
             db.enable_load_extension(True)
             sqlite_vec.load(db)
             db.enable_load_extension(False)
@@ -638,32 +741,39 @@ class AIUtils:
                 embedding = generic_parameter[1]
 
                 vec_sqlite_query_format_example = f"""
-                        SELECT
-                        recipes.*
-                        FROM recipes_vec
-                        JOIN recipes ON recipes_vec.rowid = recipes.id
-                        WHERE recipes_vec.embedding MATCH [0.1, 0.2, 0.3, ..., 0.256]
-                        ORDER BY recipes_vec.distance
-                        LIMIT 3;
-                        ;
+                    SELECT
+                    recipes.id, recipes.name, recipes.meal_type, recipes.meal_class
+                    FROM recipes_vec
+                    JOIN recipes ON recipes_vec.rowid = recipes.id
+                    WHERE recipes_vec.embedding MATCH [0.1, 0.2, 0.3, ..., 0.768]
+                    ORDER BY recipes_vec.distance
+                    LIMIT 10;
+                """
 
-                        //If you want to use vector search, you must use the MATCH clause with a query embedding
-                        """
                 instruction = f"""
-                    You are an expert AI that fills sql query blocks to query the sqllite3 ({sqlite3.version_info}) database based on the user input.
-                    Consider the given database structure when generating a query.
-                    The sqllite3 database's "recipes" table's and "recipes_vec" structures: {table_sql}
-                    If you need to perform nearest neighbor search,
-                    here is the query format to perform nearest neighbor search using sqlite-vec extension:
+                    You are an expert AI that generates SQL queries for semantic vector search on recipes.
+                    Consider the given database structure: {table_sql}
+                    
+                    Generate a vector search query to find recipes semantically similar to the user's request.
+                    The query format for nearest neighbor search using sqlite-vec extension:
                     {vec_sqlite_query_format_example}
-                    Use the following keyword in your schema: SELECT, DISTINCT, COUNT, SUM, AVG, MIN, MAX, FROM, JOIN, ON, WHERE, MATCH, LIKE, GROUP BY, HAVING, ORDER BY, DESC, LIMIT.
-                    If you don't neet any of the keywords of the keyword list, still include them in the response with empty string, None or false values.
-                    If you must perform vector search, make sure to set FROM to "recipes_vec", JOIN to "recipes", ON to "recipes_vec.rowid = recipes.id", WHERE to "recipes_vec.embedding" and MATCH to True.
-
+                    
+                    You can optionally filter results by adding WHERE conditions with AND clauses:
+                    - recipes_vec.embedding MATCH [embedding_vector] AND recipes.vegetarian = true
+                    - recipes_vec.embedding MATCH [embedding_vector] AND recipes.meal_type = 'Dinner'
+                    
+                    Always:
+                    - Use FROM recipes_vec and JOIN recipes ON recipes_vec.rowid = recipes.id
+                    - Set MATCH to True with the embedding vector
+                    - Set ORDER BY to recipes_vec.distance for relevance ranking
+                    - Include optional tag filters in WHERE clause if specified
+                    
                     IMPORTANT:
-                        There is only these 2 tables in the database: "recipes", "recipes_vec".
-                        Make sure not to use any other table name in your query. 
-                    """
+                        - Always use MATCH clause with the embedding vector
+                        - FROM must be "recipes_vec", not "recipes"
+                        - Join condition: recipes_vec.rowid = recipes.id
+                        - There are only 2 tables: "recipes" and "recipes_vec"
+                """
 
             schema = {
                 "type": "object",
@@ -671,161 +781,39 @@ class AIUtils:
                     "SELECT": {
                         "type": "string",
                         "enum": [
-                            "*",
-                            "id",
-                            "name",
-                            "ingredients",
-                            "preparation",
-                            "meal_type",
-                            "main_ingredient",
-                            "nationality",
-                            "vegetarian",
-                            "vegan",
-                            "gluten_free",
-                            "dairy_free",
-                            "nut_free",
-                            "high_fiber",
-                            "weight_loss_diet",
-                            "muscle_gain_bulking",
-                            "balanced_healthy",
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                            "meal_class",
-                            "embedding",
+                            "recipes.id, recipes.name, recipes.meal_type, recipes.meal_class",
+                            "recipes.*",
                         ],
-                        "example": "*",
-                    },
-                    "DISTINCT": {"type": "boolean", "example": False},
-                    "COUNT": {"type": "boolean", "example": False},
-                    "SUM": {
-                        "type": "string",
-                        "enum": [
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                        ],
-                    },
-                    "AVG": {
-                        "type": "string",
-                        "enum": [
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                        ],
-                        "example": "carb_score",
-                    },
-                    "MIN": {
-                        "type": "string",
-                        "enum": [
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                        ],
-                        "example": "carb_score",
-                    },
-                    "MAX": {
-                        "type": "string",
-                        "enum": [
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                        ],
-                        "example": "carb_score",
+                        "example": "recipes.id, recipes.name, recipes.meal_type, recipes.meal_class",
                     },
                     "FROM": {
                         "type": "string",
-                        "enum": ["recipes", "recipes_vec"],
-                        "example": "recipes",
+                        "enum": ["recipes_vec"],
+                        "example": "recipes_vec",
                     },
                     "JOIN": {
                         "type": "string",
-                        "enum": ["recipes", "recipes_vec"],
-                        "example": "recipes_vec",
+                        "enum": ["recipes"],
+                        "example": "recipes",
                     },
                     "ON": {
                         "type": "string",
-                        "example": "recipes.id = recipes_vec.rowid",
+                        "example": "recipes_vec.rowid = recipes.id",
                     },
                     "WHERE": {
                         "type": "string",
-                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                        "example": "recipes_vec.embedding MATCH [0.1, 0.2, ...] AND recipes.vegetarian = true",
                     },
                     "MATCH": {
                         "type": "boolean",
-                        "example": False,
-                        "description": "True for vector search",
-                    },
-                    "LIKE": {"type": "string", "example": "%search_term%"},
-                    "GROUP BY": {
-                        "type": "string",
-                        "enum": [
-                            "meal_type",
-                            "main_ingredient",
-                            "nationality",
-                            "vegetarian",
-                            "vegan",
-                            "gluten_free",
-                            "dairy_free",
-                            "nut_free",
-                            "high_fiber",
-                            "weight_loss_diet",
-                            "muscle_gain_bulking",
-                            "balanced_healthy",
-                            "meal_class",
-                        ],
-                        "example": "meal_class",
-                    },
-                    "HAVING": {
-                        "type": "string",
-                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                        "example": True,
+                        "description": "Always True for vector search",
                     },
                     "ORDER BY": {
                         "type": "string",
-                        "enum": [
-                            "id",
-                            "name",
-                            "meal_type",
-                            "main_ingredient",
-                            "nationality",
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                            "sugar_score",
-                            "spice_level_score",
-                            "preparation_time_score",
-                            "preparation_difficulty_score",
-                            "meal_class",
-                        ],
-                        "example": "spice_level_score",
+                        "enum": ["recipes_vec.distance"],
+                        "example": "recipes_vec.distance",
                     },
-                    "DESC": {"type": "boolean", "example": False},
                     "LIMIT": {
                         "type": "integer",
                         "minimum": 1,
@@ -833,7 +821,16 @@ class AIUtils:
                         "example": 10,
                     },
                 },
-                "required": ["SELECT", "FROM"],
+                "required": [
+                    "SELECT",
+                    "FROM",
+                    "JOIN",
+                    "ON",
+                    "WHERE",
+                    "MATCH",
+                    "ORDER BY",
+                    "LIMIT",
+                ],
             }
         elif build_type == "decide_intent":
 
@@ -1119,7 +1116,8 @@ class AIUtils:
             self.context_window_limit,
         )
 
-    def _add_flags(self, prompt):
+    def _add_flags(self, prompt, key_index=0):
+
         def insert_dict_at_index(d, index, key, value):
             items = list(d.items())
             items.insert(index, (key, value))
@@ -1127,15 +1125,31 @@ class AIUtils:
 
         gemini_prompt = [self.to_gemini_text(prompt)]
 
+        client = self._get_client(key_index=key_index)
+
         response = self._ask(
             prompt=gemini_prompt,
             chat=self._get_new_chat(),
             build_type="add_flags",
+            client=client,
         )
         # Update the dictionaries in the response list
         for i, recipe in enumerate(response):
-            print(prompt[i]["name"])
-            response[i] = insert_dict_at_index(recipe, 0, "embedding", [0.0] * 256)
+            # print(prompt[i]["name"])
+            response[i] = insert_dict_at_index(
+                recipe,
+                0,
+                "embedding",
+                self.get_embeddings(
+                    text=(
+                        "name:"
+                        + json.dumps([prompt[i]["name"]], ensure_ascii=False)
+                        + "\ningredients:\n"
+                        + json.dumps([prompt[i]["ingredients"]], ensure_ascii=False)
+                    ),
+                    key_index=key_index,
+                ),
+            )
         return response
 
     def _analyze_kitchen_image(self, analysis_focus, key_index=1):
@@ -1145,7 +1159,7 @@ class AIUtils:
         prompt.append(self.to_gemini_text("Analyze this kitchen image:"))
         prompt.append(self.to_gemini_image("current_frame.jpg"))
 
-        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", key_index)
+        client = self._get_client(key_index=key_index)
 
         response = self._ask(
             prompt=prompt,
@@ -1163,7 +1177,7 @@ class AIUtils:
     ):
         if chat is None:
             chat = self._get_new_chat()
-        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 2)
+        client = self._get_client(key_index=1)
 
         prompt = []
         prompt.append(self.to_gemini_text(user_input))
@@ -1189,10 +1203,8 @@ class AIUtils:
 
         return response
 
-    def generate_sql_query(self, user_input, db_path):
-        """Generates an SQL query based on user input and database structure."""
-        embedding = self.get_embeddings([user_input])
-        client, model_nanme = self._init_gemini("gemini-2.5-flash-lite", 2)
+    def filter_recipes_by_tags(self, user_input, db_path):
+        client = self._get_client(key_index=2)
 
         prompt = []
         prompt.append(self.to_gemini_text(user_input))
@@ -1203,7 +1215,31 @@ class AIUtils:
             top_p=0.1,
             temperature=0,
             chat=self._get_new_chat(),
-            build_type="query",
+            build_type="query_by_tags",
+            generic_parameter=[db_path],
+            client=client,
+        )
+
+        if not response or "SELECT" not in response:
+            print("Failed to generate SQL query.")
+            return None
+
+        return self.build_query(response)
+
+    def vector_search_recipes(self, user_input, db_path):
+        embedding = self.get_embeddings(text=user_input)
+        client = self._get_client(key_index=2)
+
+        prompt = []
+        prompt.append(self.to_gemini_text(user_input))
+
+        response = self._ask(
+            prompt=prompt,
+            top_k=1,
+            top_p=0.1,
+            temperature=0,
+            chat=self._get_new_chat(),
+            build_type="query_by_vector_similarity",
             generic_parameter=[db_path, embedding],
             client=client,
         )
@@ -1305,46 +1341,65 @@ class AIUtils:
         db.commit()
         db.close()
 
-    def get_embeddings(self, texts, key_index=1):
-        model_name = "gemini-embedding-001"
-        embeddings = []
+    def get_embeddings(self, text, key_index=1):
+        model_name = "gemini-embedding-2"
+        embedding = None
+        client = self._get_client(key_index=key_index)
 
-        for text in texts:
-            try:
-                embedding = (
-                    self.client.models.embed_content(model=model_name, contents=text)
-                    .embeddings[0]
-                    .values
+        # print(text)
+        if not client:
+            client = self.client
+
+        try:
+
+            embedding = (
+                client.models.embed_content(
+                    model=model_name,
+                    contents=text,
+                    config=types.EmbedContentConfig(
+                        output_dimensionality=768, task_type="SEMANTIC_SIMILARITY"
+                    ),
                 )
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Error getting embedding for text: {e}")
-                return None
+                .embeddings[0]
+                .values
+            )
 
-        if not embeddings:
-            print("No embeddings generated")
+        except Exception as e:
+            print(f"Error getting embedding for text: {e}")
             return None
+
+        if embedding:
+            return embedding
+        else:
+            print("No embedding generated for the text.")
+            return None
+
+        # if not embeddings:
+        #    print("No embeddings generated")
+        #    return None
 
         # Convert to numpy array with explicit dtype to ensure proper 2D shape
-        embeddings_array = np.array(embeddings, dtype=float)
+        # embeddings_array = np.array(embeddings, dtype=float)
+
+        # return embeddings_array  # canceling PCA for now.
 
         # Validate dimensions
-        if embeddings_array.ndim != 2:
-            print(f"Error: Expected 2D array, got {embeddings_array.ndim}D array")
-            return None
+        # if embeddings_array.ndim != 2:
+        #    print(f"Error: Expected 2D array, got {embeddings_array.ndim}D array")
+        #    return None
 
-        pca = joblib.load("ai_logic/pca_model.joblib")
+        # pca = joblib.load("ai_logic/pca_model.joblib")
 
-        if pca is None:
-            return embeddings_array
+        # if pca is None:
+        #    return embeddings_array
 
-        transformed = pca.transform(embeddings_array)
+        # transformed = pca.transform(embeddings_array)
         # print("Original embedding shape:", embeddings_array.shape)
         # print("Transformed embedding shape:", transformed.shape)
 
-        return transformed[0] if len(texts) == 1 else transformed
+        # return transformed[0] if len(texts) == 1 else transformed
 
-    def build_query(self, response, embedding):
+    def build_query(self, response, embedding=None):
         query = ""
         from_is_recipes = False
         for key in response:
@@ -1364,10 +1419,6 @@ class AIUtils:
                         query += f" {key}"
 
                         if key == "MATCH":
-                            new_embedding = list(embedding)
-                            if len(embedding) < 256:
-                                new_embedding += [0.0] * (256 - len(embedding))
-
                             for key1 in response:
                                 if key1 == "LIMIT":
                                     query += f" AND  recipes_vec.k = {response[key1]}"
@@ -1380,13 +1431,14 @@ class AIUtils:
 
     def get_tool_functions(self):
 
-        generate_sql = {
-            "name": "generate_sql",
+        filter_recipes_by_tags = {
+            "name": "filter_recipes_by_tags",
             "description": (
-                "Generates an SQL query to retrieve recipes based on a user's natural language request. "
-                "Use this function to translate user prompts about recipes, ingredients, meal types, or dietary preferences into SQL queries. "
-                "Examples: 'Find me vegetarian recipes with high spice level', 'Show me recipes suitable for dinner', "
-                "'Show me recipes that have the ingredient on my kitchen table', 'Show me recipes like the ones on my kitchen table'."
+                "Filters recipes based on specific dietary preferences, meal types, and ingredient tags. "
+                "Use this to narrow down recipes by exact matches on attributes like vegetarian, vegan, gluten-free, "
+                "meal type (Breakfast/Lunch/Dinner), meal class (Pasta/Pizza/Salad/etc), preparation difficulty, and prep time. "
+                "Examples: 'Find vegetarian dinner recipes', 'Show me gluten-free pasta dishes', "
+                "'Find easy-to-prepare high-protein meals'."
             ),
             "parameters": {
                 "type": "object",
@@ -1394,11 +1446,9 @@ class AIUtils:
                     "user_request": {
                         "type": "string",
                         "description": (
-                            "The user's request for generating an SQL query in natural language. "
-                            "Examples: 'Find me vegetarian recipes with high spice level', "
-                            "'Show me recipes suitable for dinner', "
-                            "'Show me recipes that have the ingredient on my kitchen table', "
-                            "'Show me recipes like the ones on my kitchen table'."
+                            "The user's request for filtering recipes by tags and attributes in natural language. "
+                            "Focus on dietary restrictions, meal types, meal classes, and preparation difficulty. "
+                            "Examples: 'vegetarian dinner recipes', 'gluten-free pasta', 'easy high-protein meals'."
                         ),
                     },
                 },
@@ -1406,6 +1456,43 @@ class AIUtils:
             },
         }
 
+        vector_search_recipes = {
+            "name": "vector_search_recipes",
+            "description": (
+                "Performs semantic vector search to find recipes similar to a user's description or preferences. "
+                "Use this to rank recipes by semantic relevance when the user describes flavors, cooking styles, ingredients, or desired taste profiles. "
+                "Examples: 'Find spicy recipes', 'Show me comfort food', 'Recipes with Asian flavors', "
+                "'Dishes similar to my favorite restaurant meal'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_request": {
+                        "type": "string",
+                        "description": (
+                            "The user's semantic search request in natural language. "
+                            "Describe flavors, cooking styles, taste profiles, or cuisines. "
+                            "Examples: 'spicy dishes', 'comfort food', 'Asian flavors', 'Mediterranean cuisine'."
+                        ),
+                    },
+                    "filtered_recipe_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": (
+                            "Optional list of recipe IDs to search within (from a prior tag filter). "
+                            "If provided, vector search is limited to these recipes. "
+                            "If empty, searches across all recipes."
+                        ),
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Number of top results to return (default: 10).",
+                        "default": 10,
+                    },
+                },
+                "required": ["user_request"],
+            },
+        }
         select_recipe = {
             "name": "select_recipe",
             "description": (

@@ -8,7 +8,15 @@ from piper.voice import PiperVoice
 
 def play(text: str, model_path: str = None):
     """
-    Synthesize text and play it directly to speakers.
+    Synthesize
+
+
+
+
+
+
+
+     text and play it directly to speakers.
 
     Args:
         text: Text to speak

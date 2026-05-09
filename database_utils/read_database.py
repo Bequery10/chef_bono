@@ -32,13 +32,11 @@ def read_recipes():
     conn.enable_load_extension(False)
     cursor = conn.cursor()
     # Join recipes with recipes_vec to get the embedding
-    cursor.execute(
-        """
+    cursor.execute("""
         SELECT recipes.*, recipes_vec.embedding
         FROM recipes
         LEFT JOIN recipes_vec ON recipes.id = recipes_vec.rowid
-    """
-    )
+    """)
     rows = cursor.fetchall()
     columns = [description[0] for description in cursor.description]
     conn.close()

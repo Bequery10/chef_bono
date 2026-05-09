@@ -3,8 +3,19 @@ from flask_socketio import SocketIO, emit
 import os
 import warnings
 import fcntl
+import logging
 
 warnings.filterwarnings("ignore")
+
+# Suppress Flask/Werkzeug request logs
+log = logging.getLogger("werkzeug")
+log.setLevel(logging.ERROR)
+
+# Suppress SocketIO logs
+socketio_logger = logging.getLogger("socketio")
+socketio_logger.setLevel(logging.ERROR)
+engineio_logger = logging.getLogger("engineio")
+engineio_logger.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -25,6 +36,7 @@ def index():
 def handle_transcript(data):
     global detected_bono
     transcript = data.get("text", "").lower()
+    print(f"Received transcript: {transcript}")
     # Write to file so main process can read it
     try:
         with open(TRANSCRIPT_FILE, "a") as f:  # "a" append mode
@@ -45,6 +57,16 @@ def handle_connect():
 def handle_disconnect():
     if os.path.exists(CONNECTED_FLAG_FILE):
         os.remove(CONNECTED_FLAG_FILE)
+
+
+@socketio.on("log_error")
+def handle_log_error(data):
+    print(f"🔴 Browser Error: {data.get('error')}")
+
+
+@socketio.on("log_info")
+def handle_log_info(data):
+    print(f"ℹ️ Browser Info: {data.get('message')}")
 
 
 def get_latest_transcript():
@@ -72,6 +94,7 @@ def start_listening_browser():
 
 
 def stop_listening_browser():
+    print("Emitting stop_listening to browser...")
     socketio.emit("stop_listening")
 
 

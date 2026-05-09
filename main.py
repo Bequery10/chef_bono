@@ -17,20 +17,20 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", message=".*FP16 is not supported on CPU.*")
 
     database = db_query_handler.Database("database_utils/recipes.db")
-    stt_model = stt.initialize_model()
     latest_query_result = None
     model = ai_utils.AIUtils()
 
-    tts.play("Welcome, I am chef Bono !")
     keep_convo_alive = True
     chat = model._get_new_chat()
     recipe = None
 
-    flask_proc = start_flask_app()
-
+    flask_proc = stt.start_flask_app()
+    greeting = True
     try:
         while keep_convo_alive:
-            prompt = stt.listen()
+            print("Listening for user input...")
+            prompt = stt.listen(greeting=greeting)
+            greeting = False
             function_to_call, function_args = None, None
             try:
                 function_to_call, function_args = (
@@ -48,8 +48,8 @@ if __name__ == "__main__":
 
                 continue
 
-            if function_to_call == "generate_sql":
-                query = model.generate_sql_query(
+            if function_to_call == "filter_recipes_by_tags":
+                query = model.filter_recipes_by_tags(
                     function_args["user_request"], database.db_path
                 )
                 if query:
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
                 if latest_query_result:
                     user_input = function_args["user_request"]
-                    chefs_reponse, keep_convo_alive = model.talk_to_ai(
+                    chefs_response, keep_convo_alive = model.talk_to_ai(
                         user_input=user_input,
                         chat=chat,
                         generic_parameter=[
@@ -73,6 +73,40 @@ if __name__ == "__main__":
 
                     tts.play(chefs_response)
 
+            elif function_to_call == "vector_search_recipes":
+                # Extract filtered recipe IDs from previous results if available
+                filtered_recipe_ids = None
+                if latest_query_result:
+                    filtered_recipe_ids = [
+                        result["id"] for result in latest_query_result
+                    ]
+
+                query = model.vector_search_recipes(
+                    user_request=function_args["user_request"],
+                    db_path=database.db_path,
+                    embedding=model.get_embeddings(function_args["user_request"]),
+                    filtered_recipe_ids=filtered_recipe_ids,
+                )
+                if query:
+                    # tts.play(f"Generated Vector Search Query: {query}")
+                    latest_query_result = database.execute_query(query)
+                else:
+                    tts.play(
+                        "Couldn't find recipes similar to your request. Please try again."
+                    )
+
+                if latest_query_result:
+                    user_input = function_args["user_request"]
+                    chefs_response, keep_convo_alive = model.talk_to_ai(
+                        user_input=user_input,
+                        chat=chat,
+                        generic_parameter=[
+                            "name: " + result["name"] + ", id: " + str(result["id"])
+                            for result in latest_query_result
+                        ],
+                    )
+
+                    tts.play(chefs_response)
             elif function_to_call == "select_recipe":
                 recipe_id = int(function_args["recipe_id"])
                 recipe_name = function_args["recipe_name"]

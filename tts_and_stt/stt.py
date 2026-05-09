@@ -9,6 +9,7 @@ from tts_and_stt.web_api_app import (
     stop_listening_browser,
     is_browser_connected,
 )
+from tts_and_stt.tts import play
 
 warnings.filterwarnings("ignore")
 
@@ -45,13 +46,17 @@ def wait_for_browser_connection(timeout=20):
     return False
 
 
-def listen():
+def listen(greeting=False):
     if not wait_for_browser_connection():
         raise Exception("Browser failed to connect")
+
+    if greeting:
+        play("Welcome, I am chef Bono !")
 
     start_listening_browser()
     while not is_bono_said():
         time.sleep(0.1)
+    play("Yes!")
 
     return get_speech()
 
@@ -80,8 +85,7 @@ def start_flask_app():
                 "--user-data-dir=/tmp/chrome_temp_bono",
                 "--disable-sync",
                 "--no-first-run",
-                "--disable-background-timer-throttling",
-                "--disable-backgrounding-occluded-windows",
+                "--headless",
                 "http://127.0.0.1:5001",
             ],
             stdout=subprocess.PIPE,

@@ -18,13 +18,13 @@
         recognition.language = 'en-US';
 
         function startListening() {
-            document.getElementById('status').textContent = 'Status: Listening...';
+            socket.emit('log_info', { message: 'Starting listening...' });
             recognition.start();
         }
 
         function stopListening() {
             recognition.stop();
-            document.getElementById('status').textContent = 'Status: Stopped';
+            socket.emit('log_info', { message: 'Stopped listening...' });
         }
 
         // Auto-start listening when page loads
@@ -38,6 +38,7 @@
         });
 
         socket.on('stop_listening', () => {
+            socket.emit('log_info', { message: 'Received stop_listening signal...' });
             stopListening();
         });
 
@@ -51,12 +52,29 @@
         }
     });
 
-    recognition.addEventListener('error', (event) => {
-        console.error('❌ Speech Recognition Error:', event.error);
-        document.getElementById('status').textContent = '❌ Error: ' + event.error;
-    });
-        socket.on('bono_detected', (data) => {
-            document.getElementById('status').textContent = '✅ BONO DETECTED!';
-        });
+   recognition.addEventListener('error', (event) => {
+    const errorMsg = `Speech Recognition Error: ${event.error}`;
+    socket.emit('log_error', { error: errorMsg });
+
+    // Auto-restart on error
+    setTimeout(() => {
+        recognition.abort();
+        recognition.start();
+    }, 1000);
+});
+
+// Handle disconnect and restart listening
+socket.on('disconnect', () => {
+    recognition.abort();
+});
+
+socket.on('reconnect', () => {
+    startListening();  // Restart listening when reconnected
+});
+
+// Handle connection loss
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+});
     </script>
 </html>
