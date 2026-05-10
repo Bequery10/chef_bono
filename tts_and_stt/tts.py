@@ -4,19 +4,12 @@ import tempfile
 import subprocess
 import os
 from piper.voice import PiperVoice
+from tts_and_stt.flags import bono_started_speaking, bono_stopped_speaking
 
 
 def play(text: str, model_path: str = None):
     """
-    Synthesize
-
-
-
-
-
-
-
-     text and play it directly to speakers.
+    Synthesize text and play it directly to speakers.
 
     Args:
         text: Text to speak
@@ -38,7 +31,9 @@ def play(text: str, model_path: str = None):
             voice.synthesize_wav(text, wav_file)
 
     try:
+        bono_started_speaking()
         # Play with macOS afplay (or substitute your OS's player)
         subprocess.run(["afplay", tmp_path], check=True)
     finally:
         os.unlink(tmp_path)
+        bono_stopped_speaking()

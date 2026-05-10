@@ -626,100 +626,6 @@ class AIUtils:
                     ],
                 },
             }
-        elif build_type == "query_by_tags":
-            db = sqlite3.connect("database_utils/recipes.db")
-            db.enable_load_extension(True)
-            sqlite_vec.load(db)
-            db.enable_load_extension(False)
-            cursor = db.cursor()
-            table_sql = None
-            with sqlite3.connect(generic_parameter[0]) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
-                result = cursor.fetchone()
-                if result:
-                    table_sql = result[0]
-
-                instruction = f"""
-                    You are an expert AI that generates SQL queries to filter recipes by tags and attributes.
-                    Consider the given database structure: {table_sql}
-                    
-                    Based on the user's request, generate a query that filters recipes by:
-                    - Dietary preferences (vegetarian, vegan, gluten_free, dairy_free, nut_free)
-                    - Meal type (Breakfast, Lunch, Dinner)
-                    - Meal class (Pasta, Pizza, Salad, etc.)
-                    - Nutritional scores (carb, protein, fat, calorie, sugar, spice level)
-                    - Preparation difficulty and time
-                    
-                    Return recipe IDs and basic information. Focus on exact boolean and categorical matches.
-                    Use WHERE clauses to filter, and ORDER BY to sort by relevance scores if needed.
-                    
-                    IMPORTANT:
-                        - Only query the "recipes" table (no vector search)
-                        - There is only one table in this context: "recipes"
-                        - Make sure not to use MATCH or the recipes_vec table
-                """
-
-            schema = {
-                "type": "object",
-                "properties": {
-                    "SELECT": {
-                        "type": "string",
-                        "enum": [
-                            "id, name, meal_type, meal_class, main_ingredient",
-                            "id, name, meal_type, meal_class, spice_level_score, preparation_difficulty_score",
-                            "*",
-                        ],
-                        "example": "id, name, meal_type, meal_class, main_ingredient",
-                    },
-                    "DISTINCT": {"type": "boolean", "example": False},
-                    "FROM": {
-                        "type": "string",
-                        "enum": ["recipes"],
-                        "example": "recipes",
-                    },
-                    "WHERE": {
-                        "type": "string",
-                        "example": "vegetarian = true AND meal_type = 'Lunch' AND meal_class = 'Pasta'",
-                    },
-                    "GROUP BY": {
-                        "type": "string",
-                        "enum": [
-                            "meal_type",
-                            "main_ingredient",
-                            "nationality",
-                            "vegetarian",
-                            "vegan",
-                            "gluten_free",
-                            "dairy_free",
-                            "nut_free",
-                            "meal_class",
-                        ],
-                    },
-                    "ORDER BY": {
-                        "type": "string",
-                        "enum": [
-                            "spice_level_score",
-                            "preparation_difficulty_score",
-                            "preparation_time_score",
-                            "carb_score",
-                            "protein_score",
-                            "fat_score",
-                            "calorie_score",
-                        ],
-                        "example": "spice_level_score",
-                    },
-                    "DESC": {"type": "boolean", "example": False},
-                    "LIMIT": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 100,
-                        "example": 20,
-                    },
-                },
-                "required": ["SELECT", "FROM", "WHERE", "LIMIT"],
-            }
-
         elif build_type == "query_by_vector_similarity":
             db = sqlite3.connect("database_utils/recipes.db")
             db.enable_load_extension(True)
@@ -727,53 +633,30 @@ class AIUtils:
             db.enable_load_extension(False)
             cursor = db.cursor()
             table_sql = None
+
             with sqlite3.connect(generic_parameter[0]) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
-                result = cursor.fetchone()
                 cursor.execute(
                     "SELECT sql FROM sqlite_master WHERE name='recipes_vec';"
                 )
-                result1 = cursor.fetchone()
-                if result and result1:
-                    table_sql = result[0] + "\n" + result1[0]
-
-                embedding = generic_parameter[1]
-
-                vec_sqlite_query_format_example = f"""
-                    SELECT
-                    recipes.id, recipes.name, recipes.meal_type, recipes.meal_class
-                    FROM recipes_vec
-                    JOIN recipes ON recipes_vec.rowid = recipes.id
-                    WHERE recipes_vec.embedding MATCH [0.1, 0.2, 0.3, ..., 0.768]
-                    ORDER BY recipes_vec.distance
-                    LIMIT 10;
-                """
+                result = cursor.fetchone()
+                if result:
+                    table_sql = result[0]
 
                 instruction = f"""
-                    You are an expert AI that generates SQL queries for semantic vector search on recipes.
-                    Consider the given database structure: {table_sql}
+                    You are an expert AI that generates vector search queries for the sqlite3 database based on the user input.
+                    The sqlite3 database's "recipes_vec" and "recipes" table structure: {table_sql}
                     
-                    Generate a vector search query to find recipes semantically similar to the user's request.
-                    The query format for nearest neighbor search using sqlite-vec extension:
-                    {vec_sqlite_query_format_example}
+                    Vector search query format:
+                    SELECT recipes.* 
+                    FROM recipes_vec
+                    JOIN recipes ON recipes_vec.rowid = recipes.id
+                    WHERE recipes_vec.embedding MATCH [embedding_vector]
+                    ORDER BY recipes_vec.distance
+                    LIMIT 3;
                     
-                    You can optionally filter results by adding WHERE conditions with AND clauses:
-                    - recipes_vec.embedding MATCH [embedding_vector] AND recipes.vegetarian = true
-                    - recipes_vec.embedding MATCH [embedding_vector] AND recipes.meal_type = 'Dinner'
-                    
-                    Always:
-                    - Use FROM recipes_vec and JOIN recipes ON recipes_vec.rowid = recipes.id
-                    - Set MATCH to True with the embedding vector
-                    - Set ORDER BY to recipes_vec.distance for relevance ranking
-                    - Include optional tag filters in WHERE clause if specified
-                    
-                    IMPORTANT:
-                        - Always use MATCH clause with the embedding vector
-                        - FROM must be "recipes_vec", not "recipes"
-                        - Join condition: recipes_vec.rowid = recipes.id
-                        - There are only 2 tables: "recipes" and "recipes_vec"
-                """
+                    Always use the MATCH clause with the provided embedding vector.
+                    """
 
             schema = {
                 "type": "object",
@@ -781,10 +664,17 @@ class AIUtils:
                     "SELECT": {
                         "type": "string",
                         "enum": [
-                            "recipes.id, recipes.name, recipes.meal_type, recipes.meal_class",
-                            "recipes.*",
+                            "*",
+                            "id",
+                            "name",
+                            "ingredients",
+                            "preparation",
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "meal_class",
                         ],
-                        "example": "recipes.id, recipes.name, recipes.meal_type, recipes.meal_class",
+                        "example": "*",
                     },
                     "FROM": {
                         "type": "string",
@@ -800,20 +690,17 @@ class AIUtils:
                         "type": "string",
                         "example": "recipes_vec.rowid = recipes.id",
                     },
-                    "WHERE": {
-                        "type": "string",
-                        "example": "recipes_vec.embedding MATCH [0.1, 0.2, ...] AND recipes.vegetarian = true",
-                    },
                     "MATCH": {
                         "type": "boolean",
                         "example": True,
-                        "description": "Always True for vector search",
+                        "description": "Always true for vector search",
                     },
                     "ORDER BY": {
                         "type": "string",
                         "enum": ["recipes_vec.distance"],
                         "example": "recipes_vec.distance",
                     },
+                    "DESC": {"type": "boolean", "example": False},
                     "LIMIT": {
                         "type": "integer",
                         "minimum": 1,
@@ -821,16 +708,185 @@ class AIUtils:
                         "example": 10,
                     },
                 },
-                "required": [
-                    "SELECT",
-                    "FROM",
-                    "JOIN",
-                    "ON",
-                    "WHERE",
-                    "MATCH",
-                    "ORDER BY",
-                    "LIMIT",
-                ],
+                "required": ["SELECT", "FROM", "JOIN", "ON", "MATCH", "LIMIT"],
+            }
+
+        elif build_type == "query_by_tags":
+            db = sqlite3.connect("database_utils/recipes.db")
+            cursor = db.cursor()
+            table_sql = None
+
+            with sqlite3.connect(generic_parameter[0]) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT sql FROM sqlite_master WHERE type='table';")
+                result = cursor.fetchone()
+                if result:
+                    table_sql = result[0]
+
+                instruction = f"""
+                    You are an expert AI that generates tag-based SQL queries for the sqlite3 database based on the user input.
+                    The sqlite3 database's "recipes" table structure: {table_sql}
+                    
+                    Tag search uses filtering on recipe attributes like vegetarian, spice_level_score, meal_type, etc.
+                    
+                    Example: SELECT * FROM recipes WHERE vegetarian = true AND spice_level_score > 0.5 ORDER BY preparation_time_score LIMIT 3;
+                    
+                    IMPORTANT: Only use the "recipes" table for tag-based searches. Do NOT use recipes_vec or MATCH.
+                    """
+
+            schema = {
+                "type": "object",
+                "properties": {
+                    "SELECT": {
+                        "type": "string",
+                        "enum": [
+                            "*",
+                            "id",
+                            "name",
+                            "ingredients",
+                            "preparation",
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "vegetarian",
+                            "vegan",
+                            "gluten_free",
+                            "dairy_free",
+                            "nut_free",
+                            "high_fiber",
+                            "weight_loss_diet",
+                            "muscle_gain_bulking",
+                            "balanced_healthy",
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                            "meal_class",
+                        ],
+                        "example": "*",
+                    },
+                    "DISTINCT": {"type": "boolean", "example": False},
+                    "COUNT": {"type": "boolean", "example": False},
+                    "SUM": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                    },
+                    "AVG": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "MIN": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "MAX": {
+                        "type": "string",
+                        "enum": [
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                        ],
+                        "example": "carb_score",
+                    },
+                    "FROM": {
+                        "type": "string",
+                        "enum": ["recipes"],
+                        "example": "recipes",
+                    },
+                    "WHERE": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5 AND vegetarian = true",
+                    },
+                    "GROUP_BY": {
+                        "type": "string",
+                        "enum": [
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "vegetarian",
+                            "vegan",
+                            "gluten_free",
+                            "dairy_free",
+                            "nut_free",
+                            "high_fiber",
+                            "weight_loss_diet",
+                            "muscle_gain_bulking",
+                            "balanced_healthy",
+                            "meal_class",
+                        ],
+                        "example": "meal_class",
+                    },
+                    "HAVING": {
+                        "type": "string",
+                        "example": "spice_level_score > 0.5",
+                    },
+                    "ORDER BY": {
+                        "type": "string",
+                        "enum": [
+                            "id",
+                            "name",
+                            "meal_type",
+                            "main_ingredient",
+                            "nationality",
+                            "carb_score",
+                            "protein_score",
+                            "fat_score",
+                            "calorie_score",
+                            "sugar_score",
+                            "spice_level_score",
+                            "preparation_time_score",
+                            "preparation_difficulty_score",
+                            "meal_class",
+                        ],
+                        "example": "spice_level_score",
+                    },
+                    "DESC": {"type": "boolean", "example": False},
+                    "LIMIT": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "example": 10,
+                    },
+                },
+                "required": ["SELECT", "FROM"],
             }
         elif build_type == "decide_intent":
 
@@ -1172,13 +1228,12 @@ class AIUtils:
         print(json.dumps(response, indent=2))
         return response
 
-    def get_intended_function_and_argument(
-        self, user_input, embedding, image_path, chat=None
-    ):
+    def get_intended_function_and_argument(self, user_input, image_path, chat=None):
         if chat is None:
             chat = self._get_new_chat()
         client = self._get_client(key_index=1)
 
+        embedding = self.get_embeddings(text=user_input, key_index=1)
         prompt = []
         prompt.append(self.to_gemini_text(user_input))
         prompt.append(self.to_gemini_text("Here is the image of the kitchen table:"))
@@ -1240,7 +1295,7 @@ class AIUtils:
             temperature=0,
             chat=self._get_new_chat(),
             build_type="query_by_vector_similarity",
-            generic_parameter=[db_path, embedding],
+            generic_parameter=[db_path],
             client=client,
         )
 
@@ -1416,17 +1471,22 @@ class AIUtils:
                     query += "\n"
                 else:
                     if response[key]:
-                        query += f" {key}"
 
                         if key == "MATCH":
+                            embedding = list(embedding) if embedding else []
+
+                            query += f"WHERE recipes_vec.embedding MATCH json('{json.dumps(embedding)}')"
                             for key1 in response:
                                 if key1 == "LIMIT":
-                                    query += f" AND  recipes_vec.k = {response[key1]}"
+                                    query += f" AND recipes_vec.k = {response[key1]}"
 
+                        else:
+                            query += f" {key}"
                         query += "\n"
 
         query += ";"
 
+        # print("Generated SQL Query:\n", query)
         return query
 
     def get_tool_functions(self):
@@ -1475,15 +1535,6 @@ class AIUtils:
                             "Examples: 'spicy dishes', 'comfort food', 'Asian flavors', 'Mediterranean cuisine'."
                         ),
                     },
-                    "filtered_recipe_ids": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": (
-                            "Optional list of recipe IDs to search within (from a prior tag filter). "
-                            "If provided, vector search is limited to these recipes. "
-                            "If empty, searches across all recipes."
-                        ),
-                    },
                     "top_k": {
                         "type": "integer",
                         "description": "Number of top results to return (default: 10).",
@@ -1504,11 +1555,11 @@ class AIUtils:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "recipe_id": {
+                    "id": {
                         "type": "number",
                         "description": (
                             "The exact id of the recipe to select, as specified or implied by the system prompt. "
-                            "Examples: name: 'Beef Broccoli Wellington', id: '15' so choose '15', name: 'Spicy Thai Noodles', id: '26' so choose '26', name: 'Classic Beef Lasagna', id: '4' so choose '4' so choose '4'."
+                            "Examples: name: 'Beef Broccoli Wellington', id: '15' so choose '15'. name: 'Spicy Thai Noodles', id: '26' so choose '26'. name: 'Classic Beef Lasagna', id: '4' so choose '4' so choose '4'."
                         ),
                     },
                     "recipe_name": {
@@ -1519,7 +1570,7 @@ class AIUtils:
                         ),
                     },
                 },
-                "required": ["recipe_id", "recipe_name"],
+                "required": ["id", "recipe_name"],
             },
         }
 
@@ -1589,7 +1640,8 @@ class AIUtils:
         }
         # Return the list of function declarations
         return [
-            generate_sql,
+            filter_recipes_by_tags,
+            vector_search_recipes,
             select_recipe,
             follow_preparation,
             respond_to_user,

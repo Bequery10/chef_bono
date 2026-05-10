@@ -10,6 +10,8 @@
     <p id="status">Status: Ready</p>
 
     <script>
+        const DEBUG = false;  // Set to false to disable debug messages
+        
         const socket = io();
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
@@ -17,19 +19,61 @@
         recognition.interimResults = true;
         recognition.language = 'en-US';
 
-        function startListening() {
+        // SpeechRecognition is event-driven; start/stop transitions are not immediate.
+        // Track intent vs actual state to make start-stop-start reliable.
+        let shouldListen = false;
+        let isListening = false;
+
+        recognition.addEventListener('start', () => {
+            isListening = true;
+            if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] recognition start' });
+        });
+
+        recognition.addEventListener('end', () => {
+            isListening = false;
+            if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] recognition end' });
+
+            // If we were asked to listen, restart only after a clean end.
+            if (shouldListen) {
+                setTimeout(() => startListening(), 200);
+            }
+        });
+
+       function startListening() {
+            shouldListen = true;
+
+            // If it's already listening (or starting), just keep intent=true.
+            if (isListening) return;
+
             socket.emit('log_info', { message: 'Starting listening...' });
-            recognition.start();
+            try {
+                recognition.start();
+            } catch (e) {
+                // Common in Chrome: InvalidStateError when start() is called before the previous
+                // stop fully finished. The onend handler will restart if shouldListen is true.
+                if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] start() ignored (transitioning)' });
+            }
         }
 
         function stopListening() {
-            recognition.stop();
-            socket.emit('log_info', { message: 'Stopped listening...' });
+            shouldListen = false;
+            socket.emit('log_info', { message: 'Stopping listening...' });
+            try {
+                recognition.stop();
+            } catch (e) {
+                // Ignore stop errors (can happen if not started yet)
+            }
         }
+        
+        socket.on('stop_listening', () => {
+            socket.emit('log_info', { message: 'Received stop_listening signal...' });
+            stopListening();
+            setTimeout(() => location.reload(true), 1000);  // Hard refresh after 1 second
+        });
 
         // Auto-start listening when page loads
         window.addEventListener('load', () => {
-            startListening();
+            //startListening();
         });
 
         // Python can control listening via SocketIO
@@ -37,35 +81,43 @@
             startListening();
         });
 
-        socket.on('stop_listening', () => {
-            socket.emit('log_info', { message: 'Received stop_listening signal...' });
-            stopListening();
-        });
 
         recognition.addEventListener('result', (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
                 const transcript = event.results[i][0].transcript;
-                console.log('🎤 Sending transcript:', transcript);  // Debug
+                if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] Final result detected' });
+                if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] Transcript text: ' + transcript });
+                if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] Sending transcript via socket...' });
                 socket.emit('transcript', { text: transcript });
+                if (DEBUG) socket.emit('log_info', { message: '🎤 [DEBUG] Transcript emitted' });
             }
         }
     });
 
    recognition.addEventListener('error', (event) => {
     const errorMsg = `Speech Recognition Error: ${event.error}`;
+    if (DEBUG) socket.emit('log_error', { error: '[ERROR] ' + errorMsg });
     socket.emit('log_error', { error: errorMsg });
 
-    // Auto-restart on error
-    setTimeout(() => {
-        recognition.abort();
-        recognition.start();
-    }, 1000);
+    // "aborted" is normal during stop()/abort() and shouldn't trigger restart loops.
+    if (event.error === 'aborted') return;
+    if (!shouldListen) return;
+
+    // Let onend() drive the restart; just re-assert intent.
+    setTimeout(() => startListening(), 1000);
 });
+
 
 // Handle disconnect and restart listening
 socket.on('disconnect', () => {
-    recognition.abort();
+    // Avoid restart loops while disconnected.
+    shouldListen = false;
+    try {
+        recognition.abort();
+    } catch (e) {
+        // ignore
+    }
 });
 
 socket.on('reconnect', () => {
@@ -74,7 +126,9 @@ socket.on('reconnect', () => {
 
 // Handle connection loss
 socket.on('connect_error', (error) => {
-    console.error('Connection error:', error);
+    if (DEBUG) socket.emit('log_error', { error: '[ERROR] Connection error: ' + error });
 });
+    
+    
     </script>
 </html>

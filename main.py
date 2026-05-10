@@ -26,17 +26,32 @@ if __name__ == "__main__":
 
     flask_proc = stt.start_flask_app()
     greeting = True
+
+    prompt_list = [
+        "Hi Chef Bono, can you suggest me some recipes with broccoli?",
+        "First one sounds good.",
+        "Yes but first, list the ingredients for me.",
+        "Can you ommit the onions and garlic from the ingredients list?",
+        "What are the preparation steps for this recipe?",
+    ]
+    i1 = 0
     try:
         while keep_convo_alive:
             print("Listening for user input...")
-            prompt = stt.listen(greeting=greeting)
+            # prompt = stt.listen(greeting=greeting)
+            prompt = prompt_list[i1]
+            print(f"User said: {prompt}")
+            i1 += 1
+
+            if i1 >= len(prompt_list):
+                break
+
             greeting = False
             function_to_call, function_args = None, None
             try:
                 function_to_call, function_args = (
                     model.get_intended_function_and_argument(
                         user_input=prompt,
-                        embedding=model.get_embeddings(prompt),
                         image_path="/Users/berkan/Desktop/Projects/chef_bono/recording_utils/brocolli.png",
                         chat=chat,
                     )
@@ -62,30 +77,24 @@ if __name__ == "__main__":
 
                 if latest_query_result:
                     user_input = function_args["user_request"]
+
+                    query_result_string = ""
+                    for result in latest_query_result:
+                        query_result_string += (
+                            f"name: {result['name']}, id: {result['id']}\n"
+                        )
+
                     chefs_response, keep_convo_alive = model.talk_to_ai(
                         user_input=user_input,
                         chat=chat,
-                        generic_parameter=[
-                            "name: " + result["name"] + ", id: " + str(result["id"])
-                            for result in latest_query_result
-                        ],
+                        generic_parameter=[query_result_string],
                     )
 
                     tts.play(chefs_response)
 
             elif function_to_call == "vector_search_recipes":
-                # Extract filtered recipe IDs from previous results if available
-                filtered_recipe_ids = None
-                if latest_query_result:
-                    filtered_recipe_ids = [
-                        result["id"] for result in latest_query_result
-                    ]
-
                 query = model.vector_search_recipes(
-                    user_request=function_args["user_request"],
-                    db_path=database.db_path,
-                    embedding=model.get_embeddings(function_args["user_request"]),
-                    filtered_recipe_ids=filtered_recipe_ids,
+                    function_args["user_request"], database.db_path
                 )
                 if query:
                     # tts.play(f"Generated Vector Search Query: {query}")
@@ -97,19 +106,30 @@ if __name__ == "__main__":
 
                 if latest_query_result:
                     user_input = function_args["user_request"]
+
+                    query_result_string = ""
+                    for result in latest_query_result:
+                        query_result_string += (
+                            f"name: {result['name']}, id: {result['id']}\n"
+                        )
+                        print("-" * 50)
+                        print(query_result_string)
+                        print("-" * 50)
+
                     chefs_response, keep_convo_alive = model.talk_to_ai(
                         user_input=user_input,
                         chat=chat,
-                        generic_parameter=[
-                            "name: " + result["name"] + ", id: " + str(result["id"])
-                            for result in latest_query_result
-                        ],
+                        generic_parameter=[query_result_string],
                     )
 
                     tts.play(chefs_response)
             elif function_to_call == "select_recipe":
-                recipe_id = int(function_args["recipe_id"])
+                recipe_id = int(function_args["id"])
                 recipe_name = function_args["recipe_name"]
+
+                print(
+                    f"Selecting recipe with ID: {recipe_id} or Name: '{recipe_name}' from latest query results..."
+                )
                 matches = [
                     recipe
                     for recipe in latest_query_result
