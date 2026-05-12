@@ -52,7 +52,7 @@ class Chat:
 
 class AIUtils:
 
-    def __init__(self, model_name="gemini-3.1-flash-lite"):
+    def __init__(self, model_name="gemini-3.1-flash-lite", language="English"):
 
         self.client, self.model = self._init_gemini(model_name, 0)
         self.input_token_limit = self.model.input_token_limit
@@ -67,6 +67,7 @@ class AIUtils:
             self.context_window_limit,
         )
         self.clients = [None] * 5
+        self.language = language
 
     def _init_gemini(self, name="gemini-3.1-flash-lite", key_index=0):
         load_dotenv()
@@ -193,6 +194,7 @@ class AIUtils:
         top_k=40,
         top_p=0.9,
     ):
+        instruction += f"\n Make sure the answer is in {self.language}, regardless of the language of the prompt."
         # Create configuration with system instruction
         generate_content_config = types.GenerateContentConfig(
             temperature=temperature,

@@ -13,19 +13,19 @@ import logging
 from recording_utils.camera import get_frame
 
 if __name__ == "__main__":
-
+    language = "english"
     logging.basicConfig(level=logging.ERROR)
     warnings.filterwarnings("ignore", message=".*FP16 is not supported on CPU.*")
 
     database = db_query_handler.Database("database_utils/recipes.db")
     latest_query_result = None
-    model = ai_utils.AIUtils()
+    model = ai_utils.AIUtils(language=language)
 
     keep_convo_alive = True
     chat = model._get_new_chat()
     recipe = None
 
-    flask_proc = start_flask_app()
+    flask_proc = start_flask_app(language=language)
     greeting = True
 
     prompt_list = [
@@ -41,7 +41,7 @@ if __name__ == "__main__":
             print("Listening for user input...")
             # prompt = stt.listen(greeting=greeting)
 
-            prompt = listen(greeting=greeting)
+            prompt = listen(greeting=greeting, language=language)
             print(f"User said: '{prompt}'")
             greeting = False
             image_path = "recording_utils/current_image.jpg"
@@ -87,7 +87,7 @@ if __name__ == "__main__":
                         generic_parameter=[query_result_string],
                     )
 
-                    play(chefs_response)
+                    play(text=chefs_response, language=language)
 
             elif function_to_call == "vector_search_recipes":
                 query = model.vector_search_recipes(
@@ -114,7 +114,7 @@ if __name__ == "__main__":
                         generic_parameter=[query_result_string],
                     )
 
-                    play(chefs_response)
+                    play(text=chefs_response, language=language)
 
             elif function_to_call == "select_recipe":
                 recipe_name = function_args["recipe_name"]
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
                 # print(result)
                 chefs_response = f"Great choice! You have selected the recipe: {result['name']}. I can list the ingredients, preparation steps, or edit the recipe for you. What would you like to do?"
-                play(chefs_response)
+                play(text=chefs_response, language=language)
                 recipe = recipe_manager.build(result)
 
                 chat._update_chat_history(prompt, chefs_response)
@@ -171,7 +171,7 @@ if __name__ == "__main__":
                     generic_parameter=[recipe_info, recipe.steps],
                 )
 
-                play(chefs_reponse)
+                play(text=chefs_reponse, language=language)
 
             elif function_to_call == "edit_recipe":
                 change = function_args["changes_to_be_made"]
@@ -183,13 +183,13 @@ if __name__ == "__main__":
                     response[0]
                 )
                 keep_convo_alive = response[1]
-                play(changes_made)
+                play(text=changes_made, language=language)
                 chat._update_chat_history(prompt, changes_made)
 
             elif function_to_call == "respond_to_user":
                 chefs_reponse = function_args["response"]
                 chat._update_chat_history(prompt, chefs_reponse)
-                play(chefs_reponse)
+                play(text=chefs_reponse, language=language)
                 print("program is continuing")
 
     except KeyboardInterrupt:

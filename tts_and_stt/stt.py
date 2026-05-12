@@ -7,6 +7,7 @@ from tts_and_stt.web_api_app import (
     get_latest_transcript,
     is_browser_connected,
     clear_transcript_file,
+    _emit_set_language,
 )
 from tts_and_stt.tts import play, stop_bono_speaking
 from tts_and_stt.flags import is_bono_speaking, is_user_speaking
@@ -86,7 +87,7 @@ def wait_for_browser_connection(timeout=20):
     return False
 
 
-def listen(greeting=False):
+def listen(greeting=False, language="english"):
     print("listen() called, waiting for browser connection...")
 
     if not wait_for_browser_connection():
@@ -94,7 +95,12 @@ def listen(greeting=False):
         raise Exception("Browser failed to connect")
 
     if greeting:
-        play("Welcome, I am chef Bono !")
+        _emit_set_language(language)
+        if language.lower() == "english":
+            play("Welcome, I am chef Bono !", language=language)
+        elif language.lower() == "turkish":
+            play("Hoş geldin, ben şef Bono!", language=language)
+
         while is_bono_speaking():
             time.sleep(0.1)
 
@@ -112,7 +118,11 @@ def listen(greeting=False):
 
     print("Bono was said, starting to listen for user speech...")
     stop_bono_speaking()
-    play("Yes!")
+
+    if language.lower() == "english":
+        play("Yes?", language=language)
+    elif language.lower() == "turkish":
+        play("Evet?", language=language)
 
     while is_user_speaking():
         time.sleep(0.1)
@@ -134,7 +144,7 @@ def stop_to_listen():
         print(f"[DEBUG] Browser listening stopped")
 
 
-def start_flask_app():
+def start_flask_app(language="english"):
     if DEBUG:
         print("[DEBUG] Starting Flask app and browser setup...")
     os.system("lsof -ti:5001 | xargs kill -9 2>/dev/null || true")
@@ -162,6 +172,11 @@ def start_flask_app():
     if DEBUG:
         print("[DEBUG] Flask startup delay complete")
 
+    browser_language = "en-US"  # Default to English
+
+    if language.lower() == "turkish":
+        browser_language = "tr-TR"
+
     if platform.system() == "Darwin":
         if DEBUG:
             print("[DEBUG] macOS detected. Launching Chrome headless...")
@@ -172,7 +187,7 @@ def start_flask_app():
                 "--disable-sync",
                 "--no-first-run",
                 # "--headless=new",
-                "http://127.0.0.1:5001",
+                f"http://127.0.0.1:5001/?lang={browser_language}",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

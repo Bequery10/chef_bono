@@ -54,38 +54,6 @@ def control_stop_listening():
     return jsonify({"ok": True}), 200
 
 
-@app.route("/control/tts_waveform", methods=["POST"])
-def control_tts_waveform():
-    """Receive WAV data from tts.py and broadcast to connected browsers."""
-    global _CURRENT_TTS_ID
-
-    data = request.get_json(silent=True) or {}
-    wav_data = data.get("wav_data")
-    text = data.get("text", "")
-    tts_id = data.get("tts_id")
-
-    if not wav_data:
-        return jsonify({"ok": False, "error": "missing_wav_data"}), 400
-
-    # Track the latest playback request so we can ignore stale "ended" events.
-    _CURRENT_TTS_ID = tts_id
-
-    # Mark Bono as speaking (used by stt.py).
-    try:
-        speaking_flag = "1" if "bono" in (text or "").lower() else "-1"
-        bono_started_speaking(speaking_flag)
-    except Exception as e:
-        if DEBUG:
-            print(f"[DEBUG] Failed to set speaking flag: {e}")
-
-    # Broadcast to all connected clients (browser plays audio locally).
-    socketio.emit(
-        "tts_waveform", {"wav_data": wav_data, "text": text, "tts_id": tts_id}
-    )
-
-    return jsonify({"ok": True, "tts_id": tts_id}), 200
-
-
 @app.route("/control/stop_tts", methods=["POST"])
 def control_stop_tts():
     """Stop any in-browser TTS playback."""
@@ -98,6 +66,26 @@ def control_stop_tts():
 
     socketio.emit("stop_tts")
     return jsonify({"ok": True}), 200
+
+
+def _emit_set_language(language):
+    """Helper function to emit language change to connected clients."""
+    if language.lower() == "english":
+        language = "en-US"
+    elif language.lower() == "turkish":
+        language = "tr-TR"
+
+    socketio.emit("set_language", {"language": language})
+    if DEBUG:
+        print(f"[DEBUG] Language set to: {language}")
+    return language
+
+
+@app.route("/control/set_language", methods=["POST"])
+def set_language():
+    language = request.args.get("language", "english")
+    result_lang = _emit_set_language(language)
+    return jsonify({"ok": True, "language": result_lang}), 200
 
 
 @app.route("/")

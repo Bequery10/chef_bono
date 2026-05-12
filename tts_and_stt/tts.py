@@ -16,13 +16,18 @@ _playback_lock = threading.Lock()
 WEB_API_BASE = "http://127.0.0.1:5001"
 
 
-def play(text: str, model_path: str = None):
+def play(text: str, model_path: str = None, language: str = "english"):
     """
     Synthesize text and play it in the background (non-blocking).
     Sends WAV data to web_api_app.py for browser distribution.
     """
     if model_path is None:
-        model_path = "/Users/berkan/Desktop/Projects/chef_bono/tts_and_stt/tts_models/en_US-hfc_female-medium/en_US-hfc_female-medium.onnx"
+        if language.lower() == "english":
+            model_path = "tts_and_stt/tts_models/en_US-hfc_female-medium/en_US-hfc_female-medium.onnx"
+        elif language.lower() == "turkish":
+            model_path = (
+                "tts_and_stt/tts_models/tr_TR-dfki-medium/tr_TR-dfki-medium.onnx"
+            )
 
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model not found: {model_path}")
