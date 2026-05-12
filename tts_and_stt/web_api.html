@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Web Speech to Python (with Audio Subtraction)</title>
+    <title>Web Speech to Python</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         body {
@@ -102,8 +102,8 @@
     </style>
 </head>
 <body>
-    <h1>🎤 Speech Recognition (with TTS Subtraction)</h1>
-    <p>Listens for speech and subtracts TTS audio interference.</p>
+    <h1>🎤 Speech Recognition</h1>
+    <p>Listens for speech and sends transcripts to Python.</p>
 
     <p id="status">Status: Ready</p>
 
@@ -130,99 +130,39 @@
 
         let shouldListen = false;
         let isListening = false;
-        let currentTTSWaveform = null;
-        let audioContext = null;
-        let microphoneStream = null;
+        let recognitionReady = true;
         let silenceTimeout = null;
         let isSpeaking = false;
         let finalTranscript = '';
         let interimTranscript = '';
+        let bonoDetected = false;
         const SILENCE_THRESHOLD_MS = 3000;
-
-        // Initialize Web Audio API
-        function initAudioContext() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }
-
-        // Decode WAV data from base64
-        function decodeWAV(wavData) {
-            const binaryString = atob(wavData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        // Process WAV and extract audio samples
-        async function processWaveform(wavArrayBuffer) {
-            initAudioContext();
-            try {
-                const audioBuffer = await audioContext.decodeAudioData(wavArrayBuffer);
-                const rawData = audioBuffer.getChannelData(0);
-                currentTTSWaveform = new Float32Array(rawData);
-                if (DEBUG) console.log(`Received TTS waveform: ${currentTTSWaveform.length} samples`);
-                socket.emit('log_info', { message: `TTS waveform cached: ${currentTTSWaveform.length} samples` });
-            } catch (e) {
-                console.error('Failed to decode WAV:', e);
-            }
-        }
-
-        // Subtract TTS waveform from audio buffer
-        function subtractTTSWaveform(audioBuffer) {
-            if (!currentTTSWaveform || currentTTSWaveform.length === 0) {
-                return audioBuffer;
-            }
-
-            const cleaned = new Float32Array(audioBuffer.length);
-            const ttsLen = currentTTSWaveform.length;
-
-            for (let i = 0; i < audioBuffer.length; i++) {
-                const ttsIndex = i % ttsLen;
-                cleaned[i] = audioBuffer[i] - (currentTTSWaveform[ttsIndex] * 0.8);
-            }
-
-            for (let i = 0; i < cleaned.length; i++) {
-                if (cleaned[i] > 1.0) cleaned[i] = 1.0;
-                if (cleaned[i] < -1.0) cleaned[i] = -1.0;
-            }
-
-            return cleaned;
-        }
-
-        // Receive TTS waveform from Python
-        socket.on('tts_waveform', async (data) => {
-            if (DEBUG) console.log('Received TTS waveform from server');
-            const wavBuffer = decodeWAV(data.wav_data);
-            await processWaveform(wavBuffer);
-        });
 
         recognition.addEventListener('start', () => {
             isListening = true;
+            recognitionReady = false;
             updateStatusDisplay();
             if (DEBUG) console.log('Recognition started');
         });
 
         recognition.addEventListener('end', () => {
             isListening = false;
+            recognitionReady = true;
             updateStatusDisplay();
             if (shouldListen) {
-                setTimeout(() => {
-                    try {
-                        recognition.start();
-                    } catch (e) {
-                        // ignore
-                    }
-                }, 200);
+                // Restart immediately if shouldListen is true
+                try {
+                    recognition.start();
+                } catch (e) {
+                    if (DEBUG) console.log('Auto-restart failed:', e);
+                }
             }
         });
 
         function updateStatusDisplay() {
             const statusEl = document.getElementById('status');
             if (isListening) {
-                statusEl.textContent = 'Status: 🎤 Listening (with TTS subtraction)...';
+                statusEl.textContent = 'Status: 🎤 Listening...';
                 statusEl.style.backgroundColor = '#c8e6c9';
             } else if (shouldListen) {
                 statusEl.textContent = 'Status: ⏳ Preparing to listen...';
@@ -235,7 +175,11 @@
 
         function updateSpeechDisplay() {
             const currentSpeechEl = document.getElementById('currentSpeech');
-            currentSpeechEl.innerHTML = `${finalTranscript}<span class="interim">${interimTranscript}</span>` || 'Waiting for speech...';
+            if (!finalTranscript && !interimTranscript) {
+                currentSpeechEl.textContent = 'Waiting for speech...';
+            } else {
+                currentSpeechEl.innerHTML = `${finalTranscript}<span class="interim">${interimTranscript}</span>`;
+            }
         }
 
         function addToSpeechHistory(text) {
@@ -264,7 +208,6 @@
             clearSilenceTimeout();
             silenceTimeout = setTimeout(() => {
                 if (isSpeaking && shouldListen) {
-                    // Emit accumulated transcript when silence exceeds 3 seconds
                     const fullText = (finalTranscript + interimTranscript).trim();
                     if (fullText) {
                         socket.emit('transcript', { text: fullText });
@@ -272,7 +215,6 @@
                         if (DEBUG) console.log(`Emitted after silence: "${fullText}"`);
                     }
                     
-                    // Reset for next utterance
                     finalTranscript = '';
                     interimTranscript = '';
                     isSpeaking = false;
@@ -290,31 +232,36 @@
             interimTranscript = '';
             clearSilenceTimeout();
             isSpeaking = false;
+            bonoDetected = false;
         }
 
         function startListening() {
+            // Wait if recognition is not ready
+            if (!recognitionReady) {
+                if (DEBUG) console.log('Recognition not ready, waiting...');
+                return;
+            }
+
             clearSilenceTimeout();
             finalTranscript = '';
             interimTranscript = '';
             isSpeaking = false;
+            bonoDetected = false;
             shouldListen = true;
             updateStatusDisplay();
             updateSpeechDisplay();
-            
-            if (isListening) return;
 
-            socket.emit('log_info', { message: 'Starting listening with TTS subtraction...' });
+            socket.emit('log_info', { message: 'Starting listening...' });
             try {
                 recognition.start();
             } catch (e) {
-                if (DEBUG) console.log('Start ignored (transitioning)');
+                if (DEBUG) console.log('Start error:', e);
             }
         }
 
         function stopListening() {
             clearSilenceTimeout();
             
-            // Emit what we have so far if anything
             const fullText = (finalTranscript + interimTranscript).trim();
             if (fullText && isSpeaking) {
                 socket.emit('transcript', { text: fullText });
@@ -323,18 +270,19 @@
             
             if (isSpeaking) {
                 socket.emit('user_stopped_speaking');
-                isSpeaking = false;
             }
             
             finalTranscript = '';
             interimTranscript = '';
+            isSpeaking = false;
+            bonoDetected = false;
             shouldListen = false;
             updateStatusDisplay();
             updateSpeechDisplay();
             
             socket.emit('log_info', { message: 'Stopping listening...' });
             try {
-                recognition.stop();
+                recognition.abort();
             } catch (e) {
                 // ignore
             }
@@ -345,7 +293,7 @@
         });
 
         window.addEventListener('load', () => {
-            startListening();
+            //startListening();
         });
 
         socket.on('start_listening', () => {
@@ -353,57 +301,57 @@
         });
 
         recognition.addEventListener('result', (event) => {
-            // Guard: only process if actively listening
-            if (!shouldListen || !isListening) {
-                return;
-            }
+    if (!shouldListen || !isListening) {
+        return;
+    }
 
+    interimTranscript = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+            if (DEBUG) console.log(`Final result: "${transcript}"`);
+        } else {
+            interimTranscript += transcript;
+        }
+    }
+
+    updateSpeechDisplay();
+
+    const fullText = (finalTranscript + interimTranscript).toLowerCase();
+    if (fullText.includes('bono') && !bonoDetected) {
+        bonoDetected = true;
+        let textToEmit = (finalTranscript + interimTranscript).trim();
+    
+        if (textToEmit) {
+            socket.emit('transcript', { text: textToEmit });
+            addToSpeechHistory(textToEmit);
+            if (DEBUG) console.log(`Emitted immediately (bono detected): "${textToEmit}"`);
+            
+            finalTranscript = '';
             interimTranscript = '';
-
-            // Process results starting from resultIndex (only new ones)
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript;
-
-                if (event.results[i].isFinal) {
-                    finalTranscript += transcript + ' ';
-                    if (DEBUG) console.log(`Final result: "${transcript}"`);
-                } else {
-                    interimTranscript += transcript;
-                }
-            }
-
             updateSpeechDisplay();
+            clearSilenceTimeout();
+            isSpeaking = false;
+        }
+        return;
+    }
 
-            // Check for "bono" keyword - emit immediately if found (case-insensitive)
-            const fullText = (finalTranscript + interimTranscript).toLowerCase();
-            if (fullText.includes('bono')) {
-                const textToEmit = (finalTranscript + interimTranscript).trim();
-                if (textToEmit) {
-                    socket.emit('transcript', { text: textToEmit });
-                    addToSpeechHistory(textToEmit);
-                    if (DEBUG) console.log(`Emitted immediately (bono detected): "${textToEmit}"`);
-                    
-                    // Reset for next utterance
-                    finalTranscript = '';
-                    interimTranscript = '';
-                    updateSpeechDisplay();
-                    clearSilenceTimeout();
-                    isSpeaking = false;
-                }
-                return; // Skip normal timeout logic
-            }
+    else if (fullText.includes('bono')) {
+        finalTranscript = finalTranscript.replace(/bono/gi, '').trim() + ' ';
+        interimTranscript = interimTranscript.replace(/bono/gi, '').trim();
+        updateSpeechDisplay();
+    }
+    if (!isSpeaking) {
+        socket.emit('user_started_speaking');
+        isSpeaking = true;
+        if (DEBUG) console.log('User started speaking');
+    }
 
-            // Handle speaking state
-            if (!isSpeaking) {
-                socket.emit('user_started_speaking');
-                isSpeaking = true;
-                if (DEBUG) console.log('User started speaking');
-            }
-
-            // Reset silence timer
-            setSilenceTimeout();
-        });
-
+    setSilenceTimeout();
+});
         recognition.addEventListener('error', (event) => {
             const errorMsg = `Speech Recognition Error: ${event.error}`;
             socket.emit('log_error', { error: errorMsg });
@@ -416,6 +364,7 @@
             isSpeaking = false;
             shouldListen = false;
             isListening = false;
+            bonoDetected = false;
             updateStatusDisplay();
             updateSpeechDisplay();
             try {

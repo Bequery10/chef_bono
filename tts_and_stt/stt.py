@@ -64,6 +64,7 @@ def get_speech():
 def is_bono_said():
 
     command = get_latest_transcript()
+    # print("commdand: ", command)
     result = "bono" in command.lower()
     if result:
         print("bono was said!")
@@ -99,12 +100,17 @@ def listen(greeting=False):
 
     start_listening_browser_remote()
     print("Waiting for user to say 'bono'...")
-    while (not is_bono_said()) or (
-        not is_bono_speaking() and is_bono_speaking() == "-1"
-    ):
+    bono_not_said = not is_bono_said()
+    sentence_has_no_bono = not (is_bono_speaking() and is_bono_speaking() == "1")
+    while bono_not_said and sentence_has_no_bono:
+
+        bono_not_said = not is_bono_said()
+        sentence_has_no_bono = not (is_bono_speaking() and is_bono_speaking() == "1")
+
         time.sleep(0.05)
-    if DEBUG:
-        print(f"[DEBUG] User said 'bono'! Playing confirmation...")
+        # print("loop")
+
+    print("Bono was said, starting to listen for user speech...")
     stop_bono_speaking()
     play("Yes!")
 
