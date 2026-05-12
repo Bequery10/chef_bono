@@ -1033,7 +1033,11 @@ class AIUtils:
                 You're a virtual chef, named Bono. Keep convos as informative and short as possible.
                 Use json schema to provide your response with the following key:
                 - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
-                - keep_convo_alive: a boolean that indicates whether the response should include a question or a statement that encourages the user to continue the conversation.
+                - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                                    Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+                                    Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
+                                    Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
+ 
             """
 
             if generic_parameter and generic_parameter[0]:
@@ -1047,7 +1051,14 @@ class AIUtils:
                     },
                     "keep_convo_alive": {
                         "type": "boolean",
-                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversation.",
+                        "description": """
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+
+                        Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
+                        Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
+
+                        """,
                     },
                 },
                 "required": ["chef's_response", "keep_convo_alive"],
@@ -1069,7 +1080,14 @@ class AIUtils:
                     },
                     "keep_convo_alive": {
                         "type": "boolean",
-                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversatio or go on with the next step.",
+                        "description": """
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+
+                        Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
+                        Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
+
+                        """,
                     },
                 },
                 "required": ["cooking_instruction", "keep_convo_alive"],
@@ -1100,8 +1118,11 @@ class AIUtils:
                     - preparation: a strings that contains the preparation steps of the recipe.
                     - steps: an array of strings that contains the cooking steps of the recipe.
                     - main_ingredient: a string that contains the main ingredient of the recipe. It should be straightforward and conventional like "chicken", "beef", "cucumber", "potato", etc.
-                    - keep_convo_alive: a boolean that indicates whether the response should include a question or a statement that encourages the user to continue the conversation.
-            """
+                    - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                                        Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+                                        Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
+                                        Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
+"""
 
             schema = {
                 "type": "object",
@@ -1113,7 +1134,14 @@ class AIUtils:
                     "main_ingredient": {"type": "string"},
                     "keep_convo_alive": {
                         "type": "boolean",
-                        "description": "Whether the response should include a question or a statement that encourages the user to continue the conversation.",
+                        "description": """
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+
+                        Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
+                        Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
+
+                        """,
                     },
                 },
                 "required": [
@@ -1555,13 +1583,6 @@ class AIUtils:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "number",
-                        "description": (
-                            "The exact id of the recipe to select, as specified or implied by the system prompt. "
-                            "Examples: name: 'Beef Broccoli Wellington', id: '15' so choose '15'. name: 'Spicy Thai Noodles', id: '26' so choose '26'. name: 'Classic Beef Lasagna', id: '4' so choose '4' so choose '4'."
-                        ),
-                    },
                     "recipe_name": {
                         "type": "string",
                         "description": (
@@ -1570,7 +1591,7 @@ class AIUtils:
                         ),
                     },
                 },
-                "required": ["id", "recipe_name"],
+                "required": ["recipe_name"],
             },
         }
 

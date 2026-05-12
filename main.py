@@ -6,10 +6,11 @@ import pprint
 import time
 import json
 from recipe import recipe_manager
-from tts_and_stt import tts
-from tts_and_stt import stt
+from tts_and_stt.tts import play
+from tts_and_stt.stt import start_flask_app, listen
 import warnings
 import logging
+from recording_utils.camera import get_frame
 
 if __name__ == "__main__":
 
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     chat = model._get_new_chat()
     recipe = None
 
-    flask_proc = stt.start_flask_app()
+    flask_proc = start_flask_app()
     greeting = True
 
     prompt_list = [
@@ -39,20 +40,18 @@ if __name__ == "__main__":
         while keep_convo_alive:
             print("Listening for user input...")
             # prompt = stt.listen(greeting=greeting)
-            prompt = prompt_list[i1]
-            print(f"User said: {prompt}")
-            i1 += 1
 
-            if i1 >= len(prompt_list):
-                break
-
+            prompt = listen(greeting=greeting)
+            print(f"User said: '{prompt}'")
             greeting = False
+            image_path = "recording_utils/current_image.jpg"
+            get_frame(path=image_path)
             function_to_call, function_args = None, None
             try:
                 function_to_call, function_args = (
                     model.get_intended_function_and_argument(
                         user_input=prompt,
-                        image_path="/Users/berkan/Desktop/Projects/chef_bono/recording_utils/brocolli.png",
+                        image_path=image_path,
                         chat=chat,
                     )
                 )
@@ -68,10 +67,10 @@ if __name__ == "__main__":
                     function_args["user_request"], database.db_path
                 )
                 if query:
-                    # tts.play(f"Generated SQL Query: {query}")
+                    # print(f"Generated SQL Query: {query}")
                     latest_query_result = database.execute_query(query)
                 else:
-                    tts.play(
+                    print(
                         "Couldn't find any recipes matching your request. Please try again with different criteria."
                     )
 
@@ -80,9 +79,7 @@ if __name__ == "__main__":
 
                     query_result_string = ""
                     for result in latest_query_result:
-                        query_result_string += (
-                            f"name: {result['name']}, id: {result['id']}\n"
-                        )
+                        query_result_string += f"name: {result['name']}\n"
 
                     chefs_response, keep_convo_alive = model.talk_to_ai(
                         user_input=user_input,
@@ -90,17 +87,17 @@ if __name__ == "__main__":
                         generic_parameter=[query_result_string],
                     )
 
-                    tts.play(chefs_response)
+                    play(chefs_response)
 
             elif function_to_call == "vector_search_recipes":
                 query = model.vector_search_recipes(
                     function_args["user_request"], database.db_path
                 )
                 if query:
-                    # tts.play(f"Generated Vector Search Query: {query}")
+                    # print(f"Generated Vector Search Query: {query}")
                     latest_query_result = database.execute_query(query)
                 else:
-                    tts.play(
+                    print(
                         "Couldn't find recipes similar to your request. Please try again."
                     )
 
@@ -109,12 +106,7 @@ if __name__ == "__main__":
 
                     query_result_string = ""
                     for result in latest_query_result:
-                        query_result_string += (
-                            f"name: {result['name']}, id: {result['id']}\n"
-                        )
-                        print("-" * 50)
-                        print(query_result_string)
-                        print("-" * 50)
+                        query_result_string += f"name: {result['name']}\n"
 
                     chefs_response, keep_convo_alive = model.talk_to_ai(
                         user_input=user_input,
@@ -122,32 +114,24 @@ if __name__ == "__main__":
                         generic_parameter=[query_result_string],
                     )
 
-                    tts.play(chefs_response)
+                    play(chefs_response)
+
             elif function_to_call == "select_recipe":
-                recipe_id = int(function_args["id"])
                 recipe_name = function_args["recipe_name"]
 
-                print(
-                    f"Selecting recipe with ID: {recipe_id} or Name: '{recipe_name}' from latest query results..."
-                )
+                print(f"Selecting recipe'{recipe_name}' from latest query results...")
+
                 matches = [
                     recipe
                     for recipe in latest_query_result
-                    if recipe["id"] == recipe_id
+                    if recipe["name"].replace(" ", "").lower()
+                    == recipe_name.replace(" ", "").lower()
                 ]
                 result = matches[0] if matches else None
 
-                if not result:
-                    matches = [
-                        recipe
-                        for recipe in latest_query_result
-                        if recipe["name"] == recipe_name
-                    ]
-                    result = matches[0] if matches else None
-
-                print(result)
-                chefs_response = f"Great choice! You have selected the recipe: {result['name']}. Let me provide you with the cooking/prepearing instructions and details for this recipe, If you wish."
-                tts.play(chefs_response)
+                # print(result)
+                chefs_response = f"Great choice! You have selected the recipe: {result['name']}. I can list the ingredients, preparation steps, or edit the recipe for you. What would you like to do?"
+                play(chefs_response)
                 recipe = recipe_manager.build(result)
 
                 chat._update_chat_history(prompt, chefs_response)
@@ -187,7 +171,7 @@ if __name__ == "__main__":
                     generic_parameter=[recipe_info, recipe.steps],
                 )
 
-                tts.play(chefs_reponse)
+                play(chefs_reponse)
 
             elif function_to_call == "edit_recipe":
                 change = function_args["changes_to_be_made"]
@@ -199,14 +183,19 @@ if __name__ == "__main__":
                     response[0]
                 )
                 keep_convo_alive = response[1]
-                tts.play(changes_made)
+                play(changes_made)
                 chat._update_chat_history(prompt, changes_made)
 
             elif function_to_call == "respond_to_user":
                 chefs_reponse = function_args["response"]
                 chat._update_chat_history(prompt, chefs_reponse)
-                tts.play(chefs_reponse)
+                play(chefs_reponse)
+                print("program is continuing")
 
     except KeyboardInterrupt:
+        flask_proc.terminate()
+        os.system("lsof -ti:5001 | xargs kill -9 2>/dev/null || true")
+
+    finally:
         flask_proc.terminate()
         os.system("lsof -ti:5001 | xargs kill -9 2>/dev/null || true")

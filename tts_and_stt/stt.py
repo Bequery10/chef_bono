@@ -8,8 +8,8 @@ from tts_and_stt.web_api_app import (
     is_browser_connected,
     clear_transcript_file,
 )
-from tts_and_stt.tts import play
-from tts_and_stt.flags import is_bono_speaking
+from tts_and_stt.tts import play, stop_bono_speaking
+from tts_and_stt.flags import is_bono_speaking, is_user_speaking
 
 warnings.filterwarnings("ignore")
 
@@ -31,8 +31,7 @@ def stop_listening_browser_remote():
 
 
 def get_speech():
-    if DEBUG:
-        print(f"[DEBUG] get_speech() started")
+
     speech = ""
     start_time = time.time()
     stop_listening = False
@@ -51,36 +50,23 @@ def get_speech():
                 print(f"[DEBUG] After removing 'yes': '{latest_speech}'")
 
         if latest_speech:
-            if DEBUG:
-                print(f"[DEBUG] Appending to speech buffer")
             speech += latest_speech
-            if DEBUG:
-                print(f"[DEBUG] Current speech buffer: '{speech}'")
             start_time = time.time()
-            if DEBUG:
-                print(f"[DEBUG] Reset timeout timer")
         else:
             elapsed = time.time() - start_time
             if elapsed > 3:
-                if DEBUG:
-                    print(
-                        f"[DEBUG] Timeout reached ({elapsed:.1f}s > 3s). Stopping listening."
-                    )
                 stop_listening = True
                 stop_to_listen()
 
-    if DEBUG:
-        print(f"[DEBUG] get_speech() completed. Final speech: '{speech}'")
     return speech
 
 
 def is_bono_said():
-    if DEBUG:
-        print(f"[DEBUG] Checking if 'bono' was mentioned...")
+
     command = get_latest_transcript()
     result = "bono" in command.lower()
-    if DEBUG:
-        print(f"[DEBUG] Transcript check: '{command}' | Contains 'bono': {result}")
+    if result:
+        print("bono was said!")
     return result
 
 
@@ -100,51 +86,37 @@ def wait_for_browser_connection(timeout=20):
 
 
 def listen(greeting=False):
-    if DEBUG:
-        print(f"[DEBUG] listen() called with greeting={greeting}")
+    print("listen() called, waiting for browser connection...")
 
     if not wait_for_browser_connection():
         print(f"[ERROR] Browser connection failed")
         raise Exception("Browser failed to connect")
 
-    if DEBUG:
-        print(f"[DEBUG] Browser connected, proceeding...")
-
     if greeting:
-        if DEBUG:
-            print(f"[DEBUG] Playing greeting message")
         play("Welcome, I am chef Bono !")
-        if DEBUG:
-            print(f"[DEBUG] Greeting played")
+        while is_bono_speaking():
+            time.sleep(0.1)
 
-    if DEBUG:
-        print(f"[DEBUG] Clearing transcript file")
-    clear_transcript_file()
-
-    if DEBUG:
-        print(f"[DEBUG] Waiting for Bono to finish speaking...")
-
-    while is_bono_speaking():
-        time.sleep(0.01)
-    clear_transcript_file()
-    if DEBUG:
-        print(f"[DEBUG] Bono finished speaking")
-    if DEBUG:
-        print(f"[DEBUG] Starting browser listening...")
     start_listening_browser_remote()
-    if DEBUG:
-        print(f"[DEBUG] Waiting for user to say 'bono'...")
-    while not is_bono_said():
-        time.sleep(0.5)
+    print("Waiting for user to say 'bono'...")
+    while (not is_bono_said()) or (
+        not is_bono_speaking() and is_bono_speaking() == "-1"
+    ):
+        time.sleep(0.05)
     if DEBUG:
         print(f"[DEBUG] User said 'bono'! Playing confirmation...")
+    stop_bono_speaking()
     play("Yes!")
 
-    if DEBUG:
-        print(f"[DEBUG] Now capturing full speech...")
-    speech = get_speech()
-    if DEBUG:
-        print(f"[DEBUG] listen() completed with speech: '{speech}'")
+    while is_user_speaking():
+        time.sleep(0.1)
+
+    stop_listening_browser_remote()
+
+    speech = get_latest_transcript()
+    if speech.startswith("yes"):
+        speech = speech[3:].strip()
+
     return speech
 
 
@@ -173,8 +145,8 @@ def start_flask_app():
     if DEBUG:
         print("[DEBUG] Spawning Flask process...")
     flask_process = subprocess.Popen(
-        ["python", "web_api_app.py"],
-        cwd="tts_and_stt",
+        ["python", "-m", "tts_and_stt.web_api_app"],
+        cwd=".",
         text=True,
     )
     if DEBUG:
@@ -193,7 +165,7 @@ def start_flask_app():
                 "--user-data-dir=/tmp/chrome_temp_bono",
                 "--disable-sync",
                 "--no-first-run",
-                "--headless=new",
+                # "--headless=new",
                 "http://127.0.0.1:5001",
             ],
             stdout=subprocess.PIPE,

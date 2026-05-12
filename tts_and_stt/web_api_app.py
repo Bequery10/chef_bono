@@ -5,6 +5,12 @@ import os
 import warnings
 import fcntl
 import logging
+from tts_and_stt.flags import (
+    bono_started_speaking,
+    bono_stopped_speaking,
+    user_started_speaking,
+    user_stopped_speaking,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -21,10 +27,13 @@ engineio_logger.setLevel(logging.ERROR)
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+
 # Debug flag - set to False to disable debug messages
 DEBUG = False
 
-detected_bono = False
+# Tracks the most recently requested TTS playback.
+_CURRENT_TTS_ID = None
+
 CONNECTED_FLAG_FILE = "/tmp/bono_browser_connected"
 TRANSCRIPT_FILE = "/tmp/bono_latest_transcript"  # Store transcript in a file
 
@@ -45,6 +54,52 @@ def control_stop_listening():
     return jsonify({"ok": True}), 200
 
 
+@app.route("/control/tts_waveform", methods=["POST"])
+def control_tts_waveform():
+    """Receive WAV data from tts.py and broadcast to connected browsers."""
+    global _CURRENT_TTS_ID
+
+    data = request.get_json(silent=True) or {}
+    wav_data = data.get("wav_data")
+    text = data.get("text", "")
+    tts_id = data.get("tts_id")
+
+    if not wav_data:
+        return jsonify({"ok": False, "error": "missing_wav_data"}), 400
+
+    # Track the latest playback request so we can ignore stale "ended" events.
+    _CURRENT_TTS_ID = tts_id
+
+    # Mark Bono as speaking (used by stt.py).
+    try:
+        speaking_flag = "1" if "bono" in (text or "").lower() else "-1"
+        bono_started_speaking(speaking_flag)
+    except Exception as e:
+        if DEBUG:
+            print(f"[DEBUG] Failed to set speaking flag: {e}")
+
+    # Broadcast to all connected clients (browser plays audio locally).
+    socketio.emit(
+        "tts_waveform", {"wav_data": wav_data, "text": text, "tts_id": tts_id}
+    )
+
+    return jsonify({"ok": True, "tts_id": tts_id}), 200
+
+
+@app.route("/control/stop_tts", methods=["POST"])
+def control_stop_tts():
+    """Stop any in-browser TTS playback."""
+    global _CURRENT_TTS_ID
+    _CURRENT_TTS_ID = None
+    try:
+        bono_stopped_speaking()
+    except Exception:
+        pass
+
+    socketio.emit("stop_tts")
+    return jsonify({"ok": True}), 200
+
+
 @app.route("/")
 def index():
     html_file = os.path.join(os.path.dirname(__file__), "web_api.html")
@@ -54,37 +109,34 @@ def index():
 
 @socketio.on("transcript")
 def handle_transcript(data):
-    global detected_bono
     transcript = data.get("text", "").lower()
     if DEBUG:
-        print(f"[DEBUG] SocketIO received transcript event")
-    if DEBUG:
-        print(f"[DEBUG] Raw data: {data}")
-    if DEBUG:
-        print(f"[DEBUG] Processed transcript (lowercased): '{transcript}'")
-    if DEBUG:
-        print(f"[DEBUG] Transcript length: {len(transcript)} chars")
+        print(
+            f"Received transcript from browser: '{transcript}' now will be written to file"
+        )
 
     # Write to file so main process can read it
     try:
-        if DEBUG:
-            print(f"[DEBUG] Attempting to write transcript to {TRANSCRIPT_FILE}")
         with open(TRANSCRIPT_FILE, "a") as f:  # "a" append mode
-            if DEBUG:
-                print(f"[DEBUG] File opened in append mode")
+
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock
-            if DEBUG:
-                print(f"[DEBUG] Lock acquired")
+
             f.write(transcript + "\n")  # Append with newline
-            if DEBUG:
-                print(f"[DEBUG] Transcript written to file")
+
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # Release lock
-            if DEBUG:
-                print(f"[DEBUG] Lock released")
-        if DEBUG:
-            print(f"[DEBUG] Transcript successfully stored")
+
     except Exception as e:
         print(f"[ERROR] Failed to write transcript: {e}")
+
+
+@socketio.on("user_started_speaking")
+def handle_user_speaking():
+    user_started_speaking()
+
+
+@socketio.on("user_stopped_speaking")
+def handle_user_stopped_speaking():
+    user_stopped_speaking()
 
 
 @socketio.on("connect")
@@ -119,6 +171,30 @@ def handle_log_info(data):
     print(f"ℹ️ [DEBUG] Browser Info Event: {info_msg}")
 
 
+@socketio.on("tts_playback_ended")
+def handle_tts_playback_ended(data):
+    """Browser notifies that a TTS buffer finished playing."""
+    global _CURRENT_TTS_ID
+
+    data = data or {}
+    ended_id = data.get("tts_id")
+
+    # Ignore stale ended events when a newer TTS has already started.
+    if ended_id and _CURRENT_TTS_ID and ended_id != _CURRENT_TTS_ID:
+        if DEBUG:
+            print(
+                f"[DEBUG] Ignoring stale tts_playback_ended: {ended_id} (current: {_CURRENT_TTS_ID})"
+            )
+        return
+
+    _CURRENT_TTS_ID = None
+    try:
+        bono_stopped_speaking()
+    except Exception as e:
+        if DEBUG:
+            print(f"[DEBUG] Failed to clear speaking flag: {e}")
+
+
 def clear_transcript_file():
     """Clear the transcript file to start fresh"""
     if DEBUG:
@@ -126,19 +202,12 @@ def clear_transcript_file():
     if os.path.exists(TRANSCRIPT_FILE):
         try:
             with open(TRANSCRIPT_FILE, "w") as f:
-                if DEBUG:
-                    print(f"[DEBUG] File opened in write mode")
+
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                if DEBUG:
-                    print(f"[DEBUG] Lock acquired")
+
                 f.truncate()
-                if DEBUG:
-                    print(f"[DEBUG] File truncated")
+
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                if DEBUG:
-                    print(f"[DEBUG] Lock released")
-            if DEBUG:
-                print(f"[DEBUG] Transcript file cleared successfully")
         except Exception as e:
             print(f"[ERROR] Error clearing transcript: {e}")
     else:
@@ -152,24 +221,12 @@ def get_latest_transcript():
             if DEBUG:
                 print(f"[DEBUG] Reading from transcript file: {TRANSCRIPT_FILE}")
             with open(TRANSCRIPT_FILE, "r+") as f:
-                if DEBUG:
-                    print(f"[DEBUG] Transcript file opened")
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock
-                if DEBUG:
-                    print(f"[DEBUG] Lock acquired")
                 transcript = f.read()
-                if DEBUG:
-                    print(f"[DEBUG] Transcript read: '{transcript}'")
-                if DEBUG:
-                    print(f"[DEBUG] Transcript length: {len(transcript)} chars")
                 f.seek(0)
                 f.truncate()  # Clear file atomically
-                if DEBUG:
-                    print(f"[DEBUG] File truncated")
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # Release lock
-                if DEBUG:
-                    print(f"[DEBUG] Lock released")
-                return transcript
+            return transcript
         except Exception as e:
             print(f"[ERROR] Error reading transcript: {e}")
             return ""
