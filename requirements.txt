@@ -8,10 +8,11 @@ piper-tts
 pydub
 simpleaudio
 scikit-learn
-SpeechRecognition
-sounddevice
-openai-whisper
 numpy
 opencv-python
 joblib
 pyaudio
+flask
+flask-socketio
+python-socketio
+python-engineio

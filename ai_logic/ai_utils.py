@@ -52,7 +52,7 @@ class Chat:
 
 class AIUtils:
 
-    def __init__(self, model_name="gemini-3.1-flash-lite", language="English"):
+    def __init__(self, model_name="gemini-3.1-flash-lite", language="english"):
 
         self.client, self.model = self._init_gemini(model_name, 0)
         self.input_token_limit = self.model.input_token_limit
@@ -1592,8 +1592,15 @@ class AIUtils:
                             "Examples: 'Old Italian Lasagna', 'Beef Broccoli Wellington', 'Spicy Thai Noodles'."
                         ),
                     },
+                    "recipe_index": {
+                        "type": "string",
+                        "description": (
+                            "The index of the recipe in the given prompt, with respect to the order in the text"
+                            "Examples: 'I can recommend Old Italian Lasagna, Beef Broccoli Wellington, Spicy Thai Noodles'.  Old Italian Lasagna is index 1, Beef Broccoli Wellington is index 2, Spicy Thai Noodles is index 3."
+                        ),
+                    },
                 },
-                "required": ["recipe_name"],
+                "required": ["recipe_name", "recipe_index"],
             },
         }
 

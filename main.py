@@ -118,19 +118,20 @@ if __name__ == "__main__":
 
             elif function_to_call == "select_recipe":
                 recipe_name = function_args["recipe_name"]
+                recipe_index = function_args["recipe_index"]
 
                 print(f"Selecting recipe'{recipe_name}' from latest query results...")
 
-                matches = [
-                    recipe
-                    for recipe in latest_query_result
-                    if recipe["name"].replace(" ", "").lower()
-                    == recipe_name.replace(" ", "").lower()
-                ]
-                result = matches[0] if matches else None
+                result = (
+                    latest_query_result[int(recipe_index) - 1] if recipe_index else None
+                )
 
-                # print(result)
-                chefs_response = f"Great choice! You have selected the recipe: {result['name']}. I can list the ingredients, preparation steps, or edit the recipe for you. What would you like to do?"
+                chefs_response = ""
+                if language == "english":
+                    chefs_response = f"Great choice! You have selected the recipe: {recipe_name}. I can list the ingredients, preparation steps, or edit the recipe for you. What would you like to do?"
+                elif language == "turkish":
+                    chefs_response = f"Seçiminiz {recipe_name}. Malzemelerini, hazırlık adımlarını listeleyebilir veya tarifi sizin için düzenleyebilirim. Ne yapmak istersiniz?"
+
                 play(text=chefs_response, language=language)
                 recipe = recipe_manager.build(result)
 
