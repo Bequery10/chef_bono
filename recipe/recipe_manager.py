@@ -63,6 +63,7 @@ class Recipe:
 
 
 def build(query_result):
+    # print("Building recipe from query result:", query_result)
     recipe = Recipe()
     recipe.name = query_result["name"]
     recipe.ingredients = query_result["ingredients"]
