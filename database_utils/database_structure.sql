@@ -2,11 +2,17 @@ DROP TABLE IF EXISTS recipes;
 DROP TABLE IF EXISTS recipes_vec;
 
 CREATE TABLE recipes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     ingredients TEXT NOT NULL,
     preparation TEXT NOT NULL,
-    meal_type INTEGER CHECK (meal_type >= 1 AND meal_type <= 3),
+    meal_type  TEXT CHECK (
+        meal_type IN (
+            'Breakfast',
+            'Lunch',
+            'Dinner'
+        )
+    ),
     main_ingredient VARCHAR(255),
     nationality VARCHAR(100),
     vegetarian BOOLEAN DEFAULT FALSE,
@@ -68,4 +74,4 @@ CREATE TABLE recipes (
     )
 );
 
-CREATE VIRTUAL TABLE recipes_vec USING vec0(embedding float[256]);
+CREATE VIRTUAL TABLE recipes_vec USING vec0(embedding float[768]);

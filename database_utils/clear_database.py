@@ -3,7 +3,7 @@ import sqlite_vec
 
 
 def clear_recipes():
-    conn = sqlite3.connect("recipes.db")
+    conn = sqlite3.connect("database_utils/recipes.db")
     cursor = conn.cursor()
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
