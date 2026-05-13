@@ -186,7 +186,7 @@ def start_flask_app(language="english"):
                 "--user-data-dir=/tmp/chrome_temp_bono",
                 "--disable-sync",
                 "--no-first-run",
-                "--headless=new",
+                # "--headless=new",
                 f"http://127.0.0.1:5001/?lang={browser_language}",
             ],
             stdout=subprocess.PIPE,

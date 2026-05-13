@@ -29,8 +29,9 @@ if __name__ == "__main__":
     greeting = True
 
     prompt_list = [
-        "Hi Chef Bono, can you suggest me some recipes with broccoli?",
-        "First one sounds good.",
+        "Provide 5 avocado recipes.",
+        "Provide 10 avocado recipes.",
+        "select the first recipe in the list.",
         "Yes but first, list the ingredients for me.",
         "Can you ommit the onions and garlic from the ingredients list?",
         "What are the preparation steps for this recipe?",
@@ -39,9 +40,11 @@ if __name__ == "__main__":
     try:
         while keep_convo_alive:
             print("Listening for user input...")
-            # prompt = stt.listen(greeting=greeting)
 
-            prompt = listen(greeting=greeting, language=language)
+            prompt = ""
+            while not prompt:
+                prompt = listen(greeting=greeting, language=language)
+
             print(f"User said: '{prompt}'")
             greeting = False
             image_path = "recording_utils/current_image.jpg"
@@ -78,21 +81,21 @@ if __name__ == "__main__":
                 if latest_query_result:
                     user_input = function_args["user_request"]
 
-                    query_result_string = ""
-                    for result in latest_query_result:
-                        query_result_string += f"name: {result['name']}\n"
+                user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response. Also, do not refer to recipes by their ids since those are not visible to the user. Refer to them by their names or by their context in the conversation. Your job is to provide a list of recipe names. Do not get into details of recipes."
 
-                    chefs_response, keep_convo_alive = model.talk_to_ai(
-                        user_input=user_input,
-                        chat=chat,
-                        generic_parameter=[query_result_string],
-                    )
+                chefs_response, keep_convo_alive = model.talk_to_ai(
+                    user_input=user_input,
+                    chat=chat,
+                    generic_parameter=[json.dumps(latest_query_result, indent=2)],
+                )
 
-                    play(text=chefs_response, language=language)
+                play(text=chefs_response, language=language)
 
             elif function_to_call == "vector_search_recipes":
                 query = model.vector_search_recipes(
-                    function_args["user_request"], database.db_path
+                    function_args["user_request"],
+                    database.db_path,
+                    limit_top_k=function_args["top_k"],
                 )
                 if query:
                     # print(f"Generated Vector Search Query: {query}")
@@ -105,17 +108,27 @@ if __name__ == "__main__":
                 if latest_query_result:
                     user_input = function_args["user_request"]
 
-                    query_result_string = ""
-                    for result in latest_query_result:
-                        query_result_string += f"name: {result['name']}\n"
+                # print(f"Latest query result: {latest_query_result}")
+                user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response. Also, do not refer to recipes by their ids since those are not visible to the user. Refer to them by their names or by their context in the conversation. Your job is to provide a list of recipe names. Do not get into details of recipes."
 
-                    chefs_response, keep_convo_alive = model.talk_to_ai(
-                        user_input=user_input,
-                        chat=chat,
-                        generic_parameter=[query_result_string],
-                    )
+                chefs_response, keep_convo_alive = model.talk_to_ai(
+                    user_input=user_input,
+                    chat=chat,
+                    generic_parameter=[json.dumps(latest_query_result, indent=2)],
+                )
 
-                    play(text=chefs_response, language=language)
+                play(text=chefs_response, language=language)
+
+            elif function_to_call == "answer_questions_about_provided_recipes":
+                user_input = function_args["user_question"]
+
+                user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response. Also, do not refer to recipes by their ids since those are not visible to the user. Refer to them by their names or by their context in the conversation."
+                chefs_response, keep_convo_alive = model.talk_to_ai(
+                    user_input=user_input,
+                    chat=chat,
+                )
+
+                play(text=chefs_response, language=language)
 
             elif function_to_call == "select_recipe":
                 recipe_name = function_args["recipe_name"]
@@ -126,6 +139,8 @@ if __name__ == "__main__":
                 result = (
                     latest_query_result[int(recipe_index) - 1] if recipe_index else None
                 )
+                # print(latest_query_result[0])
+                # print(latest_query_result[1])
 
                 chefs_response = ""
                 if language == "english":
@@ -167,6 +182,7 @@ if __name__ == "__main__":
                         meal_class={recipe.meal_class},               
                     """
                 user_input = prompt
+                user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response."
                 chefs_reponse, keep_convo_alive = model.follow_preparation(
                     user_input=user_input,
                     chat=chat,

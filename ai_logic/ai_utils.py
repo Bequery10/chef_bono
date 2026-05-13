@@ -647,15 +647,16 @@ class AIUtils:
 
                 instruction = f"""
                     You are an expert AI that generates vector search queries for the sqlite3 database based on the user input.
+                    for the select part, always select these columns: recipes.id, recipes.name, recipes.ingredients, recipes.preparation, recipes.meal_type, recipes.main_ingredient, recipes.nationality, recipes.meal_class, recipes.vegetarian, recipes.vegan, recipes.gluten_free, recipes.dairy_free, recipes.nut_free, recipes.high_fiber, recipes.weight_loss_diet, recipes.muscle_gain_bulking, recipes.balanced_healthy, recipes.carb_score, recipes.protein_score, recipes.fat_score, recipes.calorie_score, recipes.sugar_score, recipes.spice_level_score, recipes.preparation_time_score, recipes.preparation_difficulty_score
                     The sqlite3 database's "recipes_vec" and "recipes" table structure: {table_sql}
                     
                     Vector search query format:
-                    SELECT recipes.* 
+                    SELECT recipes.id, recipes.name, recipes.ingredients, recipes.preparation, recipes.meal_type, recipes.main_ingredient, recipes.nationality, recipes.meal_class, recipes.vegetarian, recipes.vegan, recipes.gluten_free, recipes.dairy_free, recipes.nut_free, recipes.high_fiber, recipes.weight_loss_diet, recipes.muscle_gain_bulking, recipes.balanced_healthy, recipes.carb_score, recipes.protein_score, recipes.fat_score, recipes.calorie_score, recipes.sugar_score, recipes.spice_level_score, recipes.preparation_time_score, recipes.preparation_difficulty_score
                     FROM recipes_vec
                     JOIN recipes ON recipes_vec.rowid = recipes.id
                     WHERE recipes_vec.embedding MATCH [embedding_vector]
                     ORDER BY recipes_vec.distance
-                    LIMIT 3;
+                    LIMIT [{generic_parameter[1]}];
                     
                     Always use the MATCH clause with the provided embedding vector.
                     """
@@ -664,19 +665,9 @@ class AIUtils:
                 "type": "object",
                 "properties": {
                     "SELECT": {
-                        "type": "string",
-                        "enum": [
-                            "*",
-                            "id",
-                            "name",
-                            "ingredients",
-                            "preparation",
-                            "meal_type",
-                            "main_ingredient",
-                            "nationality",
-                            "meal_class",
-                        ],
-                        "example": "*",
+                        "type": "boolean",
+                        "example": True,
+                        "description": "Always true for any type of query",
                     },
                     "FROM": {
                         "type": "string",
@@ -961,7 +952,11 @@ class AIUtils:
                         "query_parameter": {
                             "type": "object",
                             "properties": {
-                                "SELECT": {"type": "string", "example": "*"},
+                                "SELECT": {
+                                    "type": "boolean",
+                                    "example": True,
+                                    "description": "Always true for any type of query",
+                                },
                                 "DISTINCT": {"type": "boolean", "example": False},
                                 "COUNT": {"type": "boolean", "example": False},
                                 "SUM": {"type": "string"},  # field to sum
@@ -1318,7 +1313,7 @@ class AIUtils:
 
         return self.build_query(response)
 
-    def vector_search_recipes(self, user_input, db_path):
+    def vector_search_recipes(self, user_input, db_path, limit_top_k=3):
         embedding = self.get_embeddings(text=user_input)
         client = self._get_client(key_index=2)
 
@@ -1332,7 +1327,7 @@ class AIUtils:
             temperature=0,
             chat=self._get_new_chat(),
             build_type="query_by_vector_similarity",
-            generic_parameter=[db_path],
+            generic_parameter=[db_path, limit_top_k],
             client=client,
         )
 
@@ -1464,8 +1459,12 @@ class AIUtils:
                                 if key1 == "LIMIT":
                                     query += f" AND recipes_vec.k = {response[key1]}"
 
+                        elif key == "SELECT":
+                            query += "SELECT recipes.id, recipes.name, recipes.ingredients, recipes.preparation, recipes.meal_type, recipes.main_ingredient, recipes.nationality, recipes.meal_class, recipes.vegetarian, recipes.vegan, recipes.gluten_free, recipes.dairy_free, recipes.nut_free, recipes.high_fiber, recipes.weight_loss_diet, recipes.muscle_gain_bulking, recipes.balanced_healthy, recipes.carb_score, recipes.protein_score, recipes.fat_score, recipes.calorie_score, recipes.sugar_score, recipes.spice_level_score, recipes.preparation_time_score, recipes.preparation_difficulty_score"
+
                         else:
                             query += f" {key}"
+
                         query += "\n"
 
         query += ";"
@@ -1521,20 +1520,44 @@ class AIUtils:
                     },
                     "top_k": {
                         "type": "integer",
-                        "description": "Number of top results to return (default: 10).",
-                        "default": 10,
+                        "description": "Number of top results to return (default: 3).",
+                        "default": 3,
                     },
                 },
-                "required": ["user_request"],
+                "required": ["user_request", "top_k"],
+            },
+        }
+        answer_questions_about_provided_recipes = {
+            "name": "answer_questions_about_provided_recipes",
+            "description": (
+                "Answers user questions about specific recipes that have been provided in the conversation. "
+                "Use this to provide details, clarify steps, or give additional information about recipes that have been provided ."
+                "Do not use this for a selected recipe. Use this only to answer questions about recipes that are provided in the prompt or in the chat history which are not selected yet. "
+                "Examples: 'What are the ingredients for the second recipe in the list?', 'How long does it take to prepare the first recipe?', 'Is the first recipe suitable for a vegetarian?' "
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_question": {
+                        "type": "string",
+                        "description": (
+                            "The user's question about the provided recipes in natural language. "
+                            "Focus on asking for details, clarifications, or additional information about the recipes that are provided in the prompt or in the chat history which are not selected yet. "
+                            "Examples: 'ingredients for the second recipe', 'preparation time for the first recipe', 'Is the first recipe vegetarian?'"
+                        ),
+                    },
+                },
+                "required": ["user_question"],
             },
         }
         select_recipe = {
             "name": "select_recipe",
             "description": (
-                "Selects a recipe based on a user's natural language request. "
+                "Selects a recipe based on a user's natural language request."
                 "Use this function when the user specifies or refers to a particular recipe by name or by context from previous results. Make sure not to re-select the same recipe that is already selected in the previous conversation turns. "
                 "Examples: 'I want an Old Italian Lasagna', 'Let's go with the first recipe in the query result', 'Beef Broccoli Wellington sounds nice.', 'yes', 'sure', 'let's go with that', 'sounds good'."
                 "'Select the recipe suitable for dinner and with high spice level', 'Beef Broccoli Wellington sounds nice.'"
+                "Important: If a recipe is selected, do not try to select that recipe again. Either select a different recipe based on the user input or choose another function."
             ),
             "parameters": {
                 "type": "object",
@@ -1561,9 +1584,9 @@ class AIUtils:
         follow_preparation = {
             "name": "follow_preparation",
             "description": (
-                "Continues with the preparation of a selected recipe. "
+                "Continues with the preparation of the selected(emphasis on selected) recipe. "
                 "This function should be called after getting a go for the response: 'Great choice! You have selected the recipe: 'recipe_name'. Let me provide you with the cooking/prepearing instructions and details for this recipe, If you wish.' from the user."
-                "Use this function to guide the user through recipe steps, ingredients, or preparation details. "
+                "Use this function to guide the user through the selected (emphasis on selected) recipe's steps, ingredients, or preparation details. "
                 "Examples: 'Show me the next step', 'What ingredients do I need for the second step?', 'Can you explain how to prepare the sauce?', 'yes', 'let's start cooking', 'I'm ready', 'go ahead'."
                 "'Can you explain how to prepare the sauce?'."
             ),
@@ -1626,6 +1649,7 @@ class AIUtils:
         return [
             filter_recipes_by_tags,
             vector_search_recipes,
+            answer_questions_about_provided_recipes,
             select_recipe,
             follow_preparation,
             respond_to_user,
