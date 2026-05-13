@@ -207,12 +207,7 @@ class ChefBonoUI:
                      font=(self.FONT, 11), fg=self.TEXT,
                      bg=self.BG_CARD, anchor="w", pady=8, padx=8).pack(fill="x")
 
-        # ── Bottom bar ──
-        bottom = tk.Frame(self.container, bg=self.BG, height=40)
-        bottom.pack(fill="x", padx=40, pady=(0, 10))
-        tk.Label(bottom, text="© 2026 Chef Bono — Built with AI",
-                 font=(self.FONT, 9), fg=self.TEXT_MUTED,
-                 bg=self.BG).pack(side="left")
+
 
     def _stat_item(self, parent, icon, value, label, col):
         f = tk.Frame(parent, bg=self.BG)
