@@ -53,6 +53,7 @@ if __name__ == "__main__":
                         user_input=prompt,
                         image_path=image_path,
                         chat=chat,
+                        recipe_name=recipe.name if recipe else None,
                     )
                 )
             except Exception as e:

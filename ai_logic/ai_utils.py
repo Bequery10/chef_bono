@@ -1258,7 +1258,9 @@ class AIUtils:
         print(json.dumps(response, indent=2))
         return response
 
-    def get_intended_function_and_argument(self, user_input, image_path, chat=None):
+    def get_intended_function_and_argument(
+        self, user_input, image_path, recipe_name=None, chat=None
+    ):
         if chat is None:
             chat = self._get_new_chat()
         client = self._get_client(key_index=1)
@@ -1268,7 +1270,12 @@ class AIUtils:
         prompt.append(self.to_gemini_text(user_input))
         prompt.append(self.to_gemini_text("Here is the image of the kitchen table:"))
         prompt.append(self.to_gemini_image(image_path))
-
+        if recipe_name:
+            prompt.append(
+                self.to_gemini_text(
+                    f"User selected the recipe: {recipe_name}. Highlikely the user intent is to ask follow-up recipe questions. But still consider other possibilities as well based on the prompt."
+                )
+            )
         tools = types.Tool(function_declarations=self.get_tool_functions())
         current_time = time.time()
 
@@ -1372,59 +1379,6 @@ class AIUtils:
             return None
 
         return types.Part.from_bytes(data=image_data, mime_type=mime_type)
-
-    def set_embeddings(self, key_index=0):
-
-        db = sqlite3.connect("database_utils/recipes.db")
-        import sqlite_vec
-
-        db.enable_load_extension(True)
-        sqlite_vec.load(db)
-        db.enable_load_extension(False)
-        cursor = db.cursor()
-        recipes = cursor.execute("SELECT id, name, ingredients FROM recipes").fetchall()
-        if not recipes:
-            db.close()
-            return
-
-        model_name = "gemini-embedding-001"
-        names_and_ingredients = [
-            (name, ingredients) for _, name, ingredients in recipes
-        ]
-        embeddings = [
-            self.client.models.embed_content(
-                model=model_name,
-                contents="recipe_name:" + name + "\n ingredients: " + ingredients,
-            )
-            .embeddings[0]
-            .values
-            for name, ingredients in names_and_ingredients
-        ]
-        n_samples = len(embeddings)
-        n_features = len(embeddings[0])
-
-        print("n_samples:", n_samples, "\nn_features:", n_features)
-        n_components = min(256, n_samples)
-        pca = PCA(n_components=n_components)
-        embeddings_pca = pca.fit_transform(embeddings)
-
-        joblib.dump(pca, "pca_model.joblib")
-
-        for (recipe_id, _, _), embedding in zip(recipes, embeddings_pca):
-            # Pad or truncate to 256 dimensions
-            embedding = list(embedding)
-            if len(embedding) < 256:
-                embedding += [0.0] * (256 - len(embedding))
-            elif len(embedding) > 256:
-                embedding = embedding[:256]
-
-            cursor.execute("DELETE FROM recipes_vec")
-            cursor.execute(
-                "REPLACE INTO recipes_vec(rowid, embedding) VALUES (?, ?)",
-                (recipe_id, row_adder.serialize_f32(embedding)),
-            )
-        db.commit()
-        db.close()
 
     def get_embeddings(self, text, key_index=1):
         model_name = "gemini-embedding-2"

@@ -1,3 +1,3 @@
-last_line:22469
-processed:19244
-total:22469
+last_line:22760
+processed:291
+total:22760
