@@ -1,33 +1,367 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Web Speech to Python</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chef Bono — AI Cooking Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
- <style> :root{ --accent-warm: #F1B774; --accent-cream: #FDEACD; --accent-dark: #111111; /* black accent (no green) */ --bg-1: #fffdf8; --bg-2: #fbf7f2; --muted: #6b6b6b; --card: #ffffff; --glass: rgba(255,255,255,0.6); --radius: 14px; --gap: 16px; --shadow-sm: 0 6px 18px rgba(16,16,16,0.06); --shadow-lg: 0 24px 60px rgba(10,10,10,0.10); --border-subtle: rgba(17,17,17,0.06); --focus: rgba(17,17,17,0.06); font-synthesis: none; } *{box-sizing:border-box} html,body{height:100%} body{ margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: linear-gradient(180deg,var(--bg-1),var(--bg-2)); color: #222; padding:28px; line-height:1.45; -webkit-font-smoothing:antialiased; } /* page container + layout */ .main { max-width:1100px; margin:0 auto; display:grid; grid-template-columns: 1fr 380px; gap:32px; align-items:start; } /* header */ .header { grid-column:1/-1; display:flex; gap:16px; align-items:center; margin-bottom:6px; } .brand { display:flex; gap:12px; align-items:center; } .logo { width:56px;height:56px;border-radius:12px; background: linear-gradient(135deg,var(--accent-warm),var(--accent-cream)); display:flex;align-items:center;justify-content:center;color:var(--accent-dark); font-weight:800;box-shadow:var(--shadow-sm); border:1px solid var(--border-subtle); } .title { display:flex;flex-direction:column; } .title h1{margin:0;font-size:20px;letter-spacing:-0.2px} .title p{margin:2px 0 0 0;color:var(--muted);font-size:13px} /* status */ #status{ margin-left:auto; padding:8px 14px;border-radius:999px; background: linear-gradient(180deg,var(--accent-cream),#fff); color:var(--accent-dark);font-weight:700;border:1px solid var(--border-subtle); box-shadow:var(--shadow-sm); } /* controls (detailed groups + icon-like pills) */ .controls { display:flex; gap:12px; align-items:center; } .control-group{ display:flex;gap:8px;align-items:center; background:linear-gradient(180deg,#fff,var(--glass)); padding:10px;border-radius:12px;border:1px solid var(--border-subtle); box-shadow:var(--shadow-sm); } .btn { border:0;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; display:inline-flex;align-items:center;gap:8px; box-shadow: 0 8px 20px rgba(16,16,16,0.06); text-transform:uppercase;font-size:13px; } .btn:active{transform:translateY(1px)} .btn-start{background:linear-gradient(180deg,#000000,#222);color:#fff} .btn-stop{background:linear-gradient(180deg,#e86c3f,#d2522a);color:#fff} /* speech card with meta row */ .speech-card{ background:var(--card); padding:20px;border-radius:var(--radius); box-shadow:var(--shadow-lg);border:1px solid var(--border-subtle); } .speech-header{ display:flex;align-items:center;gap:12px;margin-bottom:12px; } .mic-badge{ width:46px;height:46px;border-radius:10px;background:linear-gradient(180deg,var(--accent-dark),#333); display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800; box-shadow:0 8px 22px rgba(0,0,0,0.12);font-size:18px; border:1px solid rgba(255,255,255,0.06); } .speech-meta{ display:flex;flex-direction:column; } .speech-meta small{color:var(--muted);font-weight:600} /* current speech — more detail & emphasis */ #currentSpeech{ font-size:16px;font-weight:800;color:var(--accent-dark); background:linear-gradient(90deg, rgba(241,183,116,0.06), rgba(255,255,255,0.6)); padding:18px;border-radius:12px;min-height:80px; border:1px solid var(--border-subtle);white-space:pre-wrap; position:relative;overflow:hidden; } #currentSpeech .interim{color:#888;font-weight:600;font-style:italic} /* decorative separators inside the speech card */ .speech-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(17,17,17,0.04),transparent);margin:14px 0;border-radius:2px} /* small action row under speech */ .speech-actions{display:flex;gap:10px;align-items:center;margin-top:12px} .pulse{width:10px;height:10px;border-radius:999px;background:var(--accent-dark);opacity:.85;box-shadow:0 4px 10px rgba(17,17,17,0.12)} /* right column: recipe panel with richer card detail */ .recipe-panel{background:linear-gradient(180deg,#fff,#fffdf7);padding:18px;border-radius:14px;border:1px solid var(--border-subtle);box-shadow:var(--shadow-sm)} #recipeCount{font-weight:800;color:var(--muted);padding:8px;border-radius:10px;background:linear-gradient(180deg,#fff,#fff8f0);text-align:center;margin-bottom:12px} #recipeList{display:grid;gap:12px} .recipeCard{ padding:14px;border-radius:12px;background:linear-gradient(180deg,#fff,#fffdf8); border:1px solid rgba(17,17,17,0.04);transition:transform .14s ease,box-shadow .14s ease; cursor:pointer;display:flex;flex-direction:column;gap:8px; } .recipeCard:hover{transform:translateY(-6px);box-shadow:var(--shadow-lg)} .recipe-head{display:flex;justify-content:space-between;align-items:center} .recipe-head h4{margin:0;font-size:15px;color:var(--accent-dark)} .recipe-meta{display:flex;gap:8px;font-size:12px;color:var(--muted);align-items:center} .recipe-meta .pill{background:var(--accent-cream);padding:6px 8px;border-radius:999px;font-weight:700;color:var(--accent-dark);border:1px solid var(--border-subtle)} /* selected recipe expanded card */ .recipeCardSelected{padding:20px;border-radius:14px;border-left:6px solid var(--accent-dark);background:linear-gradient(180deg,#fff,#fffbf6);box-shadow:var(--shadow-lg)} .recipeCardSelected h2{margin:0 0 8px 0;color:var(--accent-dark)} .recipe-sections{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px} .recipe-section h3{margin:0 0 8px 0;font-size:13px;color:var(--muted)} .recipe-section p{margin:0;color:#3b3b3b;line-height:1.6} /* scores */ .scoreGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-top:8px} .scoreItem{padding:10px;border-radius:10px;background:linear-gradient(90deg,var(--accent-cream),#fff8f0);text-align:center;font-weight:800;color:#3b3b3b;border:1px solid var(--border-subtle)} /* small utilities */ .backBtn{background:transparent;border:0;color:var(--muted);font-weight:800;cursor:pointer} .small-muted{font-size:12px;color:var(--muted)} /* responsive */ @media (max-width:980px){ .main{grid-template-columns:1fr;padding:12px} .header{flex-wrap:wrap} } </style>
+  <style>
+    :root {
+      --orange: #F4845F;
+      --orange-dark: #E06B44;
+      --orange-light: #FFF0E8;
+      --orange-warm: #F5C96A;
+      --bg: #FFFAF5;
+      --bg-card: #FFFFFF;
+      --bg-input: #FFF7F0;
+      --bg-chat: #FFFBF7;
+      --dark: #1A1A2E;
+      --text: #2D2D3F;
+      --text-sec: #6B7280;
+      --text-muted: #9CA3AF;
+      --border: #F0E6DB;
+      --green: #34C77B;
+      --green-bg: #EAFAF2;
+      --red: #EF6461;
+      --shadow-sm: 0 2px 12px rgba(0,0,0,0.04);
+      --shadow-md: 0 8px 30px rgba(0,0,0,0.06);
+      --shadow-lg: 0 20px 50px rgba(0,0,0,0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ═══ NAVBAR ═══ */
+    .navbar {
+      display: flex;
+      align-items: center;
+      padding: 16px 40px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .nav-logo {
+      width: 42px; height: 42px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--orange), var(--orange-warm));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; box-shadow: var(--shadow-sm);
+    }
+    .nav-title { font-size: 18px; font-weight: 800; color: var(--dark); }
+    .nav-sub { font-size: 13px; color: var(--text-muted); margin-left: 16px; }
+    .nav-badge {
+      margin-left: auto;
+      padding: 5px 14px; border-radius: 999px;
+      background: var(--orange-light); color: var(--orange);
+      font-size: 12px; font-weight: 700;
+    }
+    #status {
+      margin-left: 16px;
+      padding: 6px 16px; border-radius: 999px;
+      font-size: 12px; font-weight: 700;
+      border: 1px solid var(--border);
+      transition: all 0.3s ease;
+    }
+
+    /* ═══ HERO / LANDING ═══ */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 40px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 50px 40px 40px;
+      align-items: center;
+    }
+    .hero-left {}
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px; border-radius: 999px;
+      background: var(--orange-light); color: var(--orange);
+      font-size: 12px; font-weight: 700;
+      margin-bottom: 20px;
+    }
+    .hero-title {
+      font-size: 40px; font-weight: 800;
+      color: var(--dark); line-height: 1.15;
+      margin-bottom: 4px;
+    }
+    .hero-title span { color: var(--orange); }
+    .hero-desc {
+      font-size: 15px; color: var(--text-sec);
+      line-height: 1.7; margin: 16px 0 28px;
+      max-width: 480px;
+    }
+    .hero-stats {
+      display: flex; gap: 36px; margin-bottom: 32px;
+    }
+    .stat { text-align: center; }
+    .stat-icon { font-size: 22px; color: var(--orange); margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 800; color: var(--dark); }
+    .stat-label { font-size: 11px; color: var(--text-muted); }
+
+    .hero-card {
+      background: linear-gradient(180deg, #FDF3EB, #FFFAF5);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 30px; text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .hero-card-emoji { font-size: 56px; margin-bottom: 10px; }
+    .hero-card h3 { font-size: 22px; font-weight: 800; color: var(--dark); margin-bottom: 4px; }
+    .hero-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+    .feature-pill {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 16px;
+      font-size: 13px; color: var(--text);
+      margin: 6px 20px; text-align: left;
+    }
+    .feature-pill .check { color: var(--orange); font-weight: 700; margin-right: 8px; }
+
+    /* ═══ BUTTONS ═══ */
+    .btn {
+      border: none; border-radius: 10px; cursor: pointer;
+      font-family: 'Inter', sans-serif; font-weight: 700;
+      font-size: 14px; padding: 12px 24px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: transform 0.12s, box-shadow 0.12s, opacity 0.2s;
+      box-shadow: var(--shadow-sm);
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .btn:active { transform: translateY(0); }
+    .btn-orange { background: var(--orange); color: #fff; }
+    .btn-orange:hover { background: var(--orange-dark); }
+    .btn-ghost { background: var(--bg-card); color: var(--text-sec); border: 1px solid var(--border); }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-red { background: var(--red); color: #fff; }
+    .btn-row { display: flex; gap: 12px; }
+
+    /* ═══ DIVIDER ═══ */
+    .divider {
+      max-width: 1100px; margin: 0 auto;
+      height: 1px; background: var(--border);
+    }
+
+    /* ═══ MAIN CONTENT ═══ */
+    .main {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 380px;
+      gap: 28px; padding: 28px 40px 40px;
+      align-items: start;
+    }
+
+    /* ═══ SPEECH CARD ═══ */
+    .speech-card {
+      background: var(--bg-card);
+      padding: 24px; border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .speech-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .mic-badge {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: linear-gradient(180deg, var(--orange), var(--orange-dark));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #fff;
+      box-shadow: 0 4px 14px rgba(244,132,95,0.25);
+    }
+    .speech-meta h4 { font-size: 15px; font-weight: 700; color: var(--dark); margin: 0; }
+    .speech-meta small { font-size: 12px; color: var(--text-muted); }
+
+    #currentSpeech {
+      font-size: 15px; font-weight: 600; color: var(--dark);
+      background: var(--bg-input);
+      padding: 18px; border-radius: 12px; min-height: 80px;
+      border: 1px solid var(--border);
+      white-space: pre-wrap; line-height: 1.6;
+    }
+    #currentSpeech .interim { color: var(--text-muted); font-weight: 500; font-style: italic; }
+
+    .speech-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin: 14px 0;
+    }
+    .speech-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+    .control-group { display: flex; gap: 8px; }
+
+    #speechHistory {
+      margin-top: 12px; font-size: 13px; color: var(--text-sec);
+      max-height: 150px; overflow-y: auto;
+    }
+    .speechEntry {
+      padding: 6px 0; border-bottom: 1px solid var(--border);
+    }
+
+    /* ═══ RECIPE PANEL ═══ */
+    .recipe-panel {
+      background: var(--bg-card); padding: 20px;
+      border-radius: var(--radius); border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .recipe-panel h3 {
+      font-size: 16px; font-weight: 700; color: var(--dark);
+      margin-bottom: 12px;
+    }
+    #recipeCount {
+      font-weight: 700; color: var(--text-muted);
+      padding: 10px; border-radius: 10px;
+      background: var(--bg-input); text-align: center;
+      margin-bottom: 14px; font-size: 13px;
+    }
+    #recipeList { display: grid; gap: 10px; }
+
+    .recipeCard {
+      padding: 14px; border-radius: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      transition: transform 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+    }
+    .recipeCard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    .recipeCard h4 { margin: 0 0 6px; font-size: 14px; color: var(--dark); }
+    .recipeCard p { margin: 2px 0; font-size: 12px; color: var(--text-sec); }
+
+    .recipeCardSelected {
+      padding: 20px; border-radius: 14px;
+      border-left: 5px solid var(--orange);
+      background: var(--bg-input);
+      box-shadow: var(--shadow-md);
+    }
+    .recipeCardSelected h2 { margin: 0 0 10px; font-size: 20px; color: var(--dark); }
+    .recipeCardSelected h3 { font-size: 14px; color: var(--orange); margin: 14px 0 6px; }
+    .recipeCardSelected p { font-size: 13px; color: var(--text); line-height: 1.6; }
+    .recipeCardSelected hr { border: none; height: 1px; background: var(--border); margin: 12px 0; }
+
+    .scoreGrid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 8px; margin-top: 8px;
+    }
+    .scoreItem {
+      padding: 10px; border-radius: 10px;
+      background: var(--orange-light);
+      text-align: center; font-weight: 700;
+      font-size: 12px; color: var(--dark);
+      border: 1px solid var(--border);
+    }
+    .backBtn {
+      background: transparent; border: none;
+      color: var(--orange); font-weight: 700;
+      cursor: pointer; font-size: 13px;
+      margin-bottom: 10px;
+    }
+    .backBtn:hover { text-decoration: underline; }
+
+    /* ═══ RESPONSIVE ═══ */
+    @media (max-width: 980px) {
+      .hero { grid-template-columns: 1fr; padding: 30px 20px; }
+      .main { grid-template-columns: 1fr; padding: 20px; }
+      .navbar { padding: 12px 20px; }
+    }
+  </style>
 </head>
 
 <body>
-  <h1>Chef Bono</h1>
-  <p>Speech Recognition & Recipe Management</p>
 
-  <p id="status">Status: Ready</p>
+  <!-- ═══ NAVBAR ═══ -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="nav-logo">🍳</div>
+      <span class="nav-title">Chef Bono</span>
+    </div>
+    <span class="nav-sub">AI-Powered Cooking Assistant</span>
+    <span class="nav-badge">v1.0</span>
+    <span id="status">● Ready</span>
+  </nav>
 
-  <div id="controls">
-    <button id="startBtn" onclick="startListening()">Start Listening</button>
-    <button id="stopBtn" onclick="stopListening()">Stop Listening</button>
-  </div>
+  <!-- ═══ HERO LANDING ═══ -->
+  <section class="hero">
+    <div class="hero-left">
+      <div class="hero-badge">✦ AI-Powered Voice Assistant</div>
+      <h1 class="hero-title">Your Personal<br><span>Chef Assistant</span></h1>
+      <p class="hero-desc">
+        Talk with Bono and get step-by-step cooking guidance.
+        Voice-controlled, AI-powered, and always ready to help
+        you create delicious meals effortlessly.
+      </p>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-icon">🍽</div>
+          <div class="stat-value">50+</div>
+          <div class="stat-label">Recipes</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">🎤</div>
+          <div class="stat-value">Voice</div>
+          <div class="stat-label">Controlled</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-value">Real-time</div>
+          <div class="stat-label">AI Feedback</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-orange" onclick="startListening()">▶ Start Listening</button>
+        <button class="btn btn-ghost" onclick="stopListening()">⏹ Stop</button>
+      </div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-card-emoji">🧑‍🍳</div>
+      <h3>Chef Bono</h3>
+      <p>Ready to assist you</p>
+      <div class="feature-pill"><span class="check">✓</span> Voice Recognition</div>
+      <div class="feature-pill"><span class="check">✓</span> Smart Recipes</div>
+      <div class="feature-pill"><span class="check">✓</span> Step Guidance</div>
+    </div>
+  </section>
 
-  <div id="speechDisplay">
-    <h3>Recognized Speech</h3>
-    <div id="currentSpeech">Waiting for speech...</div>
-    <div id="speechHistory"></div>
-    <button class="clearBtn" onclick="clearSpeechHistory()">Clear History</button>
-  </div>
+  <div class="divider"></div>
 
-  <div id="recipeDisplay">
-    <h3>Recipes</h3>
-    <div id="recipeCount">No recipes loaded.</div>
-    <div id="recipeList"></div>
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <div class="main">
+    <!-- Speech Card -->
+    <div class="speech-card">
+      <div class="speech-header">
+        <div class="mic-badge">🎙</div>
+        <div class="speech-meta">
+          <h4>Recognized Speech</h4>
+          <small>Live voice transcription</small>
+        </div>
+      </div>
+      <div id="currentSpeech">Waiting for speech...</div>
+      <div class="speech-divider"></div>
+      <div id="speechHistory"></div>
+      <div class="speech-actions">
+        <div class="control-group">
+          <button class="btn btn-green" onclick="startListening()">▶ Start</button>
+          <button class="btn btn-red" onclick="stopListening()">⏹ Stop</button>
+        </div>
+        <button class="btn btn-ghost" onclick="clearSpeechHistory()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Recipe Panel -->
+    <div class="recipe-panel">
+      <h3>📋 Recipes</h3>
+      <div id="recipeCount">No recipes loaded.</div>
+      <div id="recipeList"></div>
+    </div>
   </div>
 
   <script>
@@ -211,14 +545,17 @@
     function updateStatusDisplay() {
       const statusEl = document.getElementById('status');
       if (isListening) {
-        statusEl.textContent = 'Status: Listening...';
-        statusEl.style.backgroundColor = '#c8e6c9';
+        statusEl.textContent = '● Listening...';
+        statusEl.style.backgroundColor = '#EAFAF2';
+        statusEl.style.color = '#34C77B';
       } else if (shouldListen) {
-        statusEl.textContent = 'Status: Preparing to listen...';
-        statusEl.style.backgroundColor = '#fff9c4';
+        statusEl.textContent = '● Preparing...';
+        statusEl.style.backgroundColor = '#FFF0E8';
+        statusEl.style.color = '#F4845F';
       } else {
-        statusEl.textContent = 'Status: Stopped';
-        statusEl.style.backgroundColor = '#ffcdd2';
+        statusEl.textContent = '● Ready';
+        statusEl.style.backgroundColor = '';
+        statusEl.style.color = '';
       }
     }
 
