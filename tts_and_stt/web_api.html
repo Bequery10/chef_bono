@@ -3,108 +3,12 @@
 <head>
   <title>Web Speech to Python</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background-color: #f5f5f5;
-    }
-    #controls {
-      margin: 20px 0;
-      padding: 15px;
-      background-color: white;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    button {
-      padding: 10px 20px;
-      margin: 5px;
-      font-size: 14px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background-color 0.3s;
-    }
-    #startBtn {
-      background-color: #4CAF50;
-      color: white;
-    }
-    #startBtn:hover {
-      background-color: #45a049;
-    }
-    #stopBtn {
-      background-color: #f44336;
-      color: white;
-    }
-    #stopBtn:hover {
-      background-color: #da190b;
-    }
-    #status {
-      font-weight: bold;
-      padding: 10px;
-      background-color: #e3f2fd;
-      border-radius: 4px;
-      display: inline-block;
-    }
-    #speechDisplay {
-      margin-top: 20px;
-      padding: 20px;
-      background-color: white;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      min-height: 100px;
-    }
-    #speechDisplay h3 {
-      margin-top: 0;
-      color: #333;
-    }
-    #currentSpeech {
-      font-size: 18px;
-      color: #1976d2;
-      font-weight: bold;
-      padding: 15px;
-      background-color: #f5f5f5;
-      border-radius: 4px;
-      min-height: 50px;
-      word-wrap: break-word;
-    }
-    .interim {
-      color: #999;
-      font-style: italic;
-    }
-    #speechHistory {
-      margin-top: 15px;
-      max-height: 200px;
-      overflow-y: auto;
-      padding: 10px;
-      background-color: #fafafa;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-    }
-    .speechEntry {
-      padding: 8px;
-      margin: 5px 0;
-      background-color: white;
-      border-left: 3px solid #4CAF50;
-      border-radius: 2px;
-      font-size: 14px;
-    }
-    .clearBtn {
-      background-color: #ff9800;
-      color: white;
-      padding: 5px 10px;
-      font-size: 12px;
-      margin-top: 10px;
-    }
-    .clearBtn:hover {
-      background-color: #e68900;
-    }
-  </style>
+ <style> :root{ --accent-warm: #F1B774; --accent-cream: #FDEACD; --accent-dark: #111111; /* black accent (no green) */ --bg-1: #fffdf8; --bg-2: #fbf7f2; --muted: #6b6b6b; --card: #ffffff; --glass: rgba(255,255,255,0.6); --radius: 14px; --gap: 16px; --shadow-sm: 0 6px 18px rgba(16,16,16,0.06); --shadow-lg: 0 24px 60px rgba(10,10,10,0.10); --border-subtle: rgba(17,17,17,0.06); --focus: rgba(17,17,17,0.06); font-synthesis: none; } *{box-sizing:border-box} html,body{height:100%} body{ margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: linear-gradient(180deg,var(--bg-1),var(--bg-2)); color: #222; padding:28px; line-height:1.45; -webkit-font-smoothing:antialiased; } /* page container + layout */ .main { max-width:1100px; margin:0 auto; display:grid; grid-template-columns: 1fr 380px; gap:32px; align-items:start; } /* header */ .header { grid-column:1/-1; display:flex; gap:16px; align-items:center; margin-bottom:6px; } .brand { display:flex; gap:12px; align-items:center; } .logo { width:56px;height:56px;border-radius:12px; background: linear-gradient(135deg,var(--accent-warm),var(--accent-cream)); display:flex;align-items:center;justify-content:center;color:var(--accent-dark); font-weight:800;box-shadow:var(--shadow-sm); border:1px solid var(--border-subtle); } .title { display:flex;flex-direction:column; } .title h1{margin:0;font-size:20px;letter-spacing:-0.2px} .title p{margin:2px 0 0 0;color:var(--muted);font-size:13px} /* status */ #status{ margin-left:auto; padding:8px 14px;border-radius:999px; background: linear-gradient(180deg,var(--accent-cream),#fff); color:var(--accent-dark);font-weight:700;border:1px solid var(--border-subtle); box-shadow:var(--shadow-sm); } /* controls (detailed groups + icon-like pills) */ .controls { display:flex; gap:12px; align-items:center; } .control-group{ display:flex;gap:8px;align-items:center; background:linear-gradient(180deg,#fff,var(--glass)); padding:10px;border-radius:12px;border:1px solid var(--border-subtle); box-shadow:var(--shadow-sm); } .btn { border:0;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; display:inline-flex;align-items:center;gap:8px; box-shadow: 0 8px 20px rgba(16,16,16,0.06); text-transform:uppercase;font-size:13px; } .btn:active{transform:translateY(1px)} .btn-start{background:linear-gradient(180deg,#000000,#222);color:#fff} .btn-stop{background:linear-gradient(180deg,#e86c3f,#d2522a);color:#fff} /* speech card with meta row */ .speech-card{ background:var(--card); padding:20px;border-radius:var(--radius); box-shadow:var(--shadow-lg);border:1px solid var(--border-subtle); } .speech-header{ display:flex;align-items:center;gap:12px;margin-bottom:12px; } .mic-badge{ width:46px;height:46px;border-radius:10px;background:linear-gradient(180deg,var(--accent-dark),#333); display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800; box-shadow:0 8px 22px rgba(0,0,0,0.12);font-size:18px; border:1px solid rgba(255,255,255,0.06); } .speech-meta{ display:flex;flex-direction:column; } .speech-meta small{color:var(--muted);font-weight:600} /* current speech — more detail & emphasis */ #currentSpeech{ font-size:16px;font-weight:800;color:var(--accent-dark); background:linear-gradient(90deg, rgba(241,183,116,0.06), rgba(255,255,255,0.6)); padding:18px;border-radius:12px;min-height:80px; border:1px solid var(--border-subtle);white-space:pre-wrap; position:relative;overflow:hidden; } #currentSpeech .interim{color:#888;font-weight:600;font-style:italic} /* decorative separators inside the speech card */ .speech-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(17,17,17,0.04),transparent);margin:14px 0;border-radius:2px} /* small action row under speech */ .speech-actions{display:flex;gap:10px;align-items:center;margin-top:12px} .pulse{width:10px;height:10px;border-radius:999px;background:var(--accent-dark);opacity:.85;box-shadow:0 4px 10px rgba(17,17,17,0.12)} /* right column: recipe panel with richer card detail */ .recipe-panel{background:linear-gradient(180deg,#fff,#fffdf7);padding:18px;border-radius:14px;border:1px solid var(--border-subtle);box-shadow:var(--shadow-sm)} #recipeCount{font-weight:800;color:var(--muted);padding:8px;border-radius:10px;background:linear-gradient(180deg,#fff,#fff8f0);text-align:center;margin-bottom:12px} #recipeList{display:grid;gap:12px} .recipeCard{ padding:14px;border-radius:12px;background:linear-gradient(180deg,#fff,#fffdf8); border:1px solid rgba(17,17,17,0.04);transition:transform .14s ease,box-shadow .14s ease; cursor:pointer;display:flex;flex-direction:column;gap:8px; } .recipeCard:hover{transform:translateY(-6px);box-shadow:var(--shadow-lg)} .recipe-head{display:flex;justify-content:space-between;align-items:center} .recipe-head h4{margin:0;font-size:15px;color:var(--accent-dark)} .recipe-meta{display:flex;gap:8px;font-size:12px;color:var(--muted);align-items:center} .recipe-meta .pill{background:var(--accent-cream);padding:6px 8px;border-radius:999px;font-weight:700;color:var(--accent-dark);border:1px solid var(--border-subtle)} /* selected recipe expanded card */ .recipeCardSelected{padding:20px;border-radius:14px;border-left:6px solid var(--accent-dark);background:linear-gradient(180deg,#fff,#fffbf6);box-shadow:var(--shadow-lg)} .recipeCardSelected h2{margin:0 0 8px 0;color:var(--accent-dark)} .recipe-sections{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px} .recipe-section h3{margin:0 0 8px 0;font-size:13px;color:var(--muted)} .recipe-section p{margin:0;color:#3b3b3b;line-height:1.6} /* scores */ .scoreGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-top:8px} .scoreItem{padding:10px;border-radius:10px;background:linear-gradient(90deg,var(--accent-cream),#fff8f0);text-align:center;font-weight:800;color:#3b3b3b;border:1px solid var(--border-subtle)} /* small utilities */ .backBtn{background:transparent;border:0;color:var(--muted);font-weight:800;cursor:pointer} .small-muted{font-size:12px;color:var(--muted)} /* responsive */ @media (max-width:980px){ .main{grid-template-columns:1fr;padding:12px} .header{flex-wrap:wrap} } </style>
 </head>
 
 <body>
-  <h1>Speech Recognition</h1>
-  <p>Listens for speech and sends transcripts to Python.</p>
+  <h1>Chef Bono</h1>
+  <p>Speech Recognition & Recipe Management</p>
 
   <p id="status">Status: Ready</p>
 
@@ -118,6 +22,12 @@
     <div id="currentSpeech">Waiting for speech...</div>
     <div id="speechHistory"></div>
     <button class="clearBtn" onclick="clearSpeechHistory()">Clear History</button>
+  </div>
+
+  <div id="recipeDisplay">
+    <h3>Recipes</h3>
+    <div id="recipeCount">No recipes loaded.</div>
+    <div id="recipeList"></div>
   </div>
 
   <script>
@@ -147,6 +57,116 @@
     let bonoDetected = false;
 
     const SILENCE_THRESHOLD_MS = 3000;
+
+    // ==================== RECIPE RENDERING ====================
+
+    function renderRecipes(recipes) {
+  const countEl = document.getElementById('recipeCount');
+  const listEl = document.getElementById('recipeList');
+
+  currentRecipesList = recipes;  // Store for going back
+  listEl.innerHTML = '';
+
+  if (!recipes || recipes.length === 0) {
+    countEl.textContent = 'No recipes loaded.';
+    return;
+  }
+
+  countEl.textContent = `${recipes.length} recipe${recipes.length === 1 ? '' : 's'} loaded.`;
+
+  recipes.forEach((recipe, index) => {
+    const card = document.createElement('div');
+    card.className = 'recipeCard';
+
+    const ingredients = Array.isArray(recipe.ingredients)
+      ? recipe.ingredients.join(', ')
+      : (recipe.ingredients || '');
+
+    card.innerHTML = `
+      <h4>${index + 1}. ${recipe.name || 'Unnamed recipe'}</h4>
+      <p><strong>Meal type:</strong> ${recipe.meal_type || '-'}</p>
+      <p><strong>Main ingredient:</strong> ${recipe.main_ingredient || '-'}</p>
+      <p><strong>Ingredients:</strong> ${ingredients}</p>
+      <p><strong>Preparation:</strong> ${recipe.preparation || '-'}</p>
+    `;
+
+    card.onclick = () => renderSelectedRecipe(recipe);
+    listEl.appendChild(card);
+  });
+}
+   function renderSelectedRecipe(recipe) {
+  const listEl = document.getElementById('recipeList');
+  listEl.innerHTML = '';
+
+  if (!recipe) {
+    listEl.innerHTML = '<p>No recipe selected.</p>';
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'recipeCardSelected';
+
+  const ingredients = Array.isArray(recipe.ingredients)
+    ? recipe.ingredients.join(', ')
+    : (recipe.ingredients || '');
+
+  const dietary = [];
+  if (recipe.vegetarian) dietary.push('Vegetarian');
+  if (recipe.vegan) dietary.push('Vegan');
+  if (recipe.gluten_free) dietary.push('Gluten-free');
+  if (recipe.dairy_free) dietary.push('Dairy-free');
+  if (recipe.nut_free) dietary.push('Nut-free');
+  if (recipe.high_fiber) dietary.push('High-fiber');
+
+  const diet_types = [];
+  if (recipe.weight_loss_diet) diet_types.push('Weight Loss');
+  if (recipe.muscle_gain_bulking) diet_types.push('Muscle Gain');
+  if (recipe.balanced_healthy) diet_types.push('Balanced');
+
+  card.innerHTML = `
+    <button class="backBtn" onclick="renderRecipes(currentRecipesList)">← Back to List</button>
+    <h2>${recipe.name || 'Unnamed Recipe'}</h2>
+    <hr>
+    
+    <h3>Basic Info</h3>
+    <p><strong>Meal Type:</strong> ${recipe.meal_type || '-'}</p>
+    <p><strong>Main Ingredient:</strong> ${recipe.main_ingredient || '-'}</p>
+    <p><strong>Nationality:</strong> ${recipe.nationality || '-'}</p>
+    <p><strong>Meal Class:</strong> ${recipe.meal_class || '-'}</p>
+    
+    <h3>Ingredients</h3>
+    <p>${ingredients || '-'}</p>
+    
+    <h3>Preparation</h3>
+    <p>${recipe.preparation || '-'}</p>
+
+    <h3>Steps</h3>
+    <p>${Array.isArray(recipe.steps) ? recipe.steps.map((step, i) => `${i + 1}. ${step}`).join('<br>') : (recipe.steps || '-')}</p>
+    
+    ${dietary.length > 0 ? `<h3>Dietary Info</h3><p>${dietary.join(', ')}</p>` : ''}
+    
+    ${diet_types.length > 0 ? `<h3>Diet Type</h3><p>${diet_types.join(', ')}</p>` : ''}
+    
+    <h3>Nutritional Scores</h3>
+    <div class="scoreGrid">
+      <div class="scoreItem">Carbs: ${recipe.carb_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Protein: ${recipe.protein_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Fat: ${recipe.fat_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Calories: ${recipe.calorie_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Sugar: ${recipe.sugar_score?.toFixed(1) || '-'}</div>
+    </div>
+    
+    <h3>Other Scores</h3>
+    <div class="scoreGrid">
+      <div class="scoreItem">Spice Level: ${recipe.spice_level_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Prep Time: ${recipe.preparation_time_score?.toFixed(1) || '-'}</div>
+      <div class="scoreItem">Difficulty: ${recipe.preparation_difficulty_score?.toFixed(1) || '-'}</div>
+    </div>
+  `;
+
+  listEl.appendChild(card);
+}
+    // ==================== LANGUAGE UTILITIES ====================
 
     function normalizeLanguageInput(value) {
       if (!value) return null;
@@ -186,6 +206,8 @@
       return true;
     }
 
+    // ==================== STATUS & DISPLAY UPDATES ====================
+
     function updateStatusDisplay() {
       const statusEl = document.getElementById('status');
       if (isListening) {
@@ -223,6 +245,8 @@
         historyEl.removeChild(historyEl.lastChild);
       }
     }
+
+    // ==================== SILENCE TIMEOUT ====================
 
     function clearSilenceTimeout() {
       if (silenceTimeout) {
@@ -262,6 +286,8 @@
       isSpeaking = false;
       bonoDetected = false;
     }
+
+    // ==================== LISTENING CONTROLS ====================
 
     function startListening() {
       if (!recognitionReady) {
@@ -319,7 +345,8 @@
       }
     }
 
-    // Speech recognition events
+    // ==================== SPEECH RECOGNITION EVENTS ====================
+
     recognition.addEventListener('start', () => {
       isListening = true;
       recognitionReady = false;
@@ -398,7 +425,18 @@
       if (DEBUG) console.log(errorMsg);
     });
 
-    // Socket.IO events
+    // ==================== SOCKET.IO EVENTS ====================
+
+    socket.on('recipes_update', (data) => {
+      if (DEBUG) console.log('Recipes update received:', data);
+      renderRecipes(data?.recipes || []);
+    });
+
+    socket.on('selected_recipe', (data) => {
+      if (DEBUG) console.log('Selected recipe received:', data);
+      renderSelectedRecipe(data?.recipe || null);
+    });
+
     socket.on('set_language', (data) => {
       if (data && data.language) {
         const ok = set_language(data.language);

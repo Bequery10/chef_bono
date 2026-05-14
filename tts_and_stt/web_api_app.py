@@ -68,6 +68,22 @@ def control_stop_tts():
     return jsonify({"ok": True}), 200
 
 
+@app.route("/control/recipes", methods=["POST"])
+def control_recipes():
+    data = request.get_json(force=True) or {}
+    recipes = data.get("recipes", [])
+    socketio.emit("recipes_update", {"recipes": recipes})
+    return jsonify({"ok": True, "count": len(recipes)}), 200
+
+
+@app.route("/control/selected_recipe", methods=["POST"])
+def control_selected_recipe():
+    data = request.get_json(force=True) or {}
+    recipe = data.get("recipe")
+    socketio.emit("selected_recipe_update", {"recipe": recipe})
+    return jsonify({"ok": True}), 200
+
+
 def _emit_set_language(language):
     """Helper function to emit language change to connected clients."""
     if language.lower() == "english":

@@ -11,6 +11,34 @@ from tts_and_stt.stt import start_flask_app, listen
 import warnings
 import logging
 from recording_utils.camera import get_frame
+import requests
+
+WEB_API_BASE = "http://127.0.0.1:5001"
+
+
+def send_recipes_to_browser(recipes):
+    """Send a list of recipes to the browser for display."""
+    try:
+        requests.post(
+            f"{WEB_API_BASE}/control/recipes",
+            json={"recipes": recipes},
+            timeout=2,
+        )
+    except Exception as e:
+        print(f"[WARNING] Failed to send recipes to browser: {e}")
+
+
+def send_selected_recipe_to_browser(recipe):
+    """Send a single selected recipe to the browser for detailed display."""
+    try:
+        requests.post(
+            f"{WEB_API_BASE}/control/selected_recipe",
+            json={"recipe": recipe},
+            timeout=2,
+        )
+    except Exception as e:
+        print(f"[WARNING] Failed to send selected recipe to browser: {e}")
+
 
 if __name__ == "__main__":
     language = "english"
@@ -80,6 +108,7 @@ if __name__ == "__main__":
 
                 if latest_query_result:
                     user_input = function_args["user_request"]
+                    send_recipes_to_browser(latest_query_result)
 
                 user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response. Also, do not refer to recipes by their ids since those are not visible to the user. Refer to them by their names or by their context in the conversation. Your job is to provide a list of recipe names. Do not get into details of recipes."
 
@@ -107,7 +136,7 @@ if __name__ == "__main__":
 
                 if latest_query_result:
                     user_input = function_args["user_request"]
-
+                    send_recipes_to_browser(latest_query_result)
                 # print(f"Latest query result: {latest_query_result}")
                 user_input += "\n Your response will be read by a text-to-speech system, so please do not use any special characters, formatting or abbreviations in your response. Also, do not refer to recipes by their ids since those are not visible to the user. Refer to them by their names or by their context in the conversation. Your job is to provide a list of recipe names. Do not get into details of recipes."
 
@@ -139,9 +168,8 @@ if __name__ == "__main__":
                 result = (
                     latest_query_result[int(recipe_index) - 1] if recipe_index else None
                 )
-                # print(latest_query_result[0])
-                # print(latest_query_result[1])
 
+                # print(f"result: {result}")
                 chefs_response = ""
                 if language == "english":
                     chefs_response = f"Great choice! You have selected the recipe: {recipe_name}. I can list the ingredients, preparation steps, or edit the recipe for you. What would you like to do?"
@@ -150,6 +178,10 @@ if __name__ == "__main__":
 
                 play(text=chefs_response, language=language)
                 recipe = recipe_manager.build(result)
+
+                new_result = result.copy()
+                new_result["steps"] = recipe.steps
+                send_recipes_to_browser([new_result])
 
                 chat._update_chat_history(prompt, chefs_response)
 
