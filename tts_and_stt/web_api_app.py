@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit, send
-
+import signal
 import os
 import warnings
 import fcntl
@@ -10,6 +10,11 @@ from tts_and_stt.flags import (
     bono_stopped_speaking,
     user_started_speaking,
     user_stopped_speaking,
+    has_app_started,
+    set_app_started,
+    clear_app_started,
+    clear_convo_alive,
+    set_convo_alive,
 )
 
 warnings.filterwarnings("ignore")
@@ -111,6 +116,20 @@ def index():
         return f.read()
 
 
+def emit_chat_history(chat_history):
+    """Helper function to send chat history to browser."""
+    socketio.emit("chat_history_update", {"chat_history": chat_history})
+
+
+@app.route("/control/chat_history", methods=["POST"])
+def send_chat_history():
+    data = request.get_json(force=True) or {}
+    chat_history = data.get("chat_history", [])
+    # print(f"[DEBUG] Received chat history update: {chat_history}")
+    emit_chat_history(chat_history)
+    return jsonify({"ok": True}), 200
+
+
 @socketio.on("transcript")
 def handle_transcript(data):
     transcript = data.get("text", "").lower()
@@ -131,6 +150,56 @@ def handle_transcript(data):
 
     except Exception as e:
         print(f"[ERROR] Failed to write transcript: {e}")
+
+
+@socketio.on("exit_app")
+def handle_exit_app():
+    # state cleanup
+    clear_app_started()
+    clear_convo_alive()
+
+    if os.path.exists(CONNECTED_FLAG_FILE):
+        os.remove(CONNECTED_FLAG_FILE)
+
+    # Interrupt parent (main.py process) using explicit PID when provided.
+    # Fallback to OS parent PID if env var is missing or invalid.
+    parent_pid_env = os.environ.get("BONO_PARENT_PID", "").strip()
+    try:
+        parent_pid = int(parent_pid_env) if parent_pid_env else os.getppid()
+    except ValueError:
+        parent_pid = os.getppid()
+
+    try:
+        os.kill(parent_pid, signal.SIGINT)
+        return {"ok": True, "parent_pid": parent_pid}
+    except ProcessLookupError:
+        return {
+            "ok": False,
+            "error": "parent_process_not_found",
+            "parent_pid": parent_pid,
+        }
+    except PermissionError as e:
+        print(f"[WARNING] Could not signal parent process {parent_pid}: {e}")
+        return {
+            "ok": False,
+            "error": "permission_denied",
+            "parent_pid": parent_pid,
+        }
+
+
+@socketio.on("app_exited")
+def handle_app_exited():
+    clear_app_started()
+
+
+@socketio.on("app_started")
+def handle_app_started():
+    set_app_started()
+
+
+@socketio.on("app_stopped")
+def handle_app_stopped():
+    clear_app_started()
 
 
 @socketio.on("user_started_speaking")

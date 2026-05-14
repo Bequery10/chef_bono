@@ -86,7 +86,6 @@
       padding: 50px 40px 40px;
       align-items: center;
     }
-    .hero-left {}
     .hero-badge {
       display: inline-block;
       padding: 6px 16px; border-radius: 999px;
@@ -156,10 +155,23 @@
 
     /* ═══ MAIN CONTENT ═══ */
     .main {
-      max-width: 1100px; margin: 0 auto;
-      display: grid; grid-template-columns: 1fr 380px;
-      gap: 28px; padding: 28px 40px 40px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 40px 40px;
+      display: grid;
+      gap: 28px;
+    }
+    .main-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 28px;
       align-items: start;
+    }
+    .main-actions {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 10px;
     }
 
     /* ═══ SPEECH CARD ═══ */
@@ -200,12 +212,123 @@
     .speech-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
     .control-group { display: flex; gap: 8px; }
 
-    #speechHistory {
-      margin-top: 12px; font-size: 13px; color: var(--text-sec);
-      max-height: 150px; overflow-y: auto;
+    /* ═══ CHAT HISTORY PANEL ═══ */
+    .chat-panel {
+      background: var(--bg-card);
+      padding: 24px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 6px;
     }
-    .speechEntry {
-      padding: 6px 0; border-bottom: 1px solid var(--border);
+    .chat-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .chat-panel-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--dark);
+    }
+    .chat-panel-header small {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    #chatHistory {
+      display: grid;
+      gap: 10px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .chatEntry {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-input);
+    }
+    .chatEntryHeader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+    .chatRole {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--orange-light);
+      color: var(--dark);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .chatContent {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .chatEmpty {
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.6);
+      text-align: center;
+      font-size: 13px;
+    }
+    .chatInputArea {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    #chatInputField {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-input);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      transition: border-color 0.2s ease;
+    }
+    #chatInputField:focus {
+      outline: none;
+      border-color: var(--orange);
+      box-shadow: 0 0 0 3px rgba(244, 132, 95, 0.1);
+    }
+    #chatInputField::placeholder {
+      color: var(--text-muted);
+    }
+    #chatSendBtn {
+      padding: 10px 14px;
+      background: var(--orange);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+      box-shadow: var(--shadow-sm);
+    }
+    #chatSendBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+      background: var(--orange-dark);
+    }
+    #chatSendBtn:active {
+      transform: translateY(0);
     }
 
     /* ═══ RECIPE PANEL ═══ */
@@ -270,7 +393,8 @@
     /* ═══ RESPONSIVE ═══ */
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; padding: 30px 20px; }
-      .main { grid-template-columns: 1fr; padding: 20px; }
+      .main { padding: 20px; }
+      .main-top { grid-template-columns: 1fr; }
       .navbar { padding: 12px 20px; }
     }
   </style>
@@ -281,7 +405,6 @@
   <!-- ═══ NAVBAR ═══ -->
   <nav class="navbar">
     <div class="nav-brand">
-      <div class="nav-logo">🍳</div>
       <span class="nav-title">Chef Bono</span>
     </div>
     <span class="nav-sub">AI-Powered Cooking Assistant</span>
@@ -290,7 +413,7 @@
   </nav>
 
   <!-- ═══ HERO LANDING ═══ -->
-  <section class="hero">
+  <section id="heroScreen" class="hero">
     <div class="hero-left">
       <div class="hero-badge">✦ AI-Powered Voice Assistant</div>
       <h1 class="hero-title">Your Personal<br><span>Chef Assistant</span></h1>
@@ -302,7 +425,7 @@
       <div class="hero-stats">
         <div class="stat">
           <div class="stat-icon">🍽</div>
-          <div class="stat-value">50+</div>
+          <div class="stat-value">20k+</div>
           <div class="stat-label">Recipes</div>
         </div>
         <div class="stat">
@@ -317,8 +440,8 @@
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-orange" onclick="startListening()">▶ Start Listening</button>
-        <button class="btn btn-ghost" onclick="stopListening()">⏹ Stop</button>
+        <button class="btn btn-orange" onclick="start_app()">Start</button>
+        <button class="btn btn-ghost" onclick="exit_app()">Exit</button>
       </div>
     </div>
     <div class="hero-card">
@@ -331,39 +454,54 @@
     </div>
   </section>
 
-  <div class="divider"></div>
-
-  <!-- ═══ MAIN CONTENT ═══ -->
-  <div class="main">
-    <!-- Speech Card -->
-    <div class="speech-card">
-      <div class="speech-header">
-        <div class="mic-badge">🎙</div>
-        <div class="speech-meta">
-          <h4>Recognized Speech</h4>
-          <small>Live voice transcription</small>
+  <section id="mainScreen" style="display:none;">
+    <div class="divider"></div>
+    <div class="main">
+      <div class="main-actions">
+        <button class="btn btn-ghost" onclick="back_to_hero()">← Go back</button>
+      </div>
+      <div class="main-top">
+        <div class="chat-panel">
+          <div class="chat-panel-header">
+            <div>
+              <h3>Chat History</h3>
+              <small>Conversation flow from the assistant and user</small>
+            </div>
+            <small id="chatHistoryCount">0 messages</small>
+          </div>
+          <div id="chatHistory">
+            <div class="chatEmpty">No chat history yet.</div>
+          </div>
+          <div class="chatInputArea">
+            <input type="text" id="chatInputField" placeholder="Type a message..." onkeydown="handleChatInputKeydown(event)" />
+            <button id="chatSendBtn" onclick="sendChatPrompt()">Send</button>
+          </div>
+        </div>
+        <!-- Recipe Panel -->
+        <div class="recipe-panel">
+          <h3>📋 Recipes</h3>
+          <div id="recipeCount">No recipes loaded.</div>
+          <div id="recipeList"></div>
         </div>
       </div>
-      <div id="currentSpeech">Waiting for speech...</div>
-      <div class="speech-divider"></div>
-      <div id="speechHistory"></div>
-      <div class="speech-actions">
-        <div class="control-group">
-          <button class="btn btn-green" onclick="startListening()">▶ Start</button>
-          <button class="btn btn-red" onclick="stopListening()">⏹ Stop</button>
+      <div class="speech-card">
+        <div class="speech-header">
+          <div class="speech-meta">
+            <h4>Recognized Speech</h4>
+            <small>Live voice transcription</small>
+          </div>
         </div>
-        <button class="btn btn-ghost" onclick="clearSpeechHistory()">Clear</button>
-      </div>
-    </div>
-
-    <!-- Recipe Panel -->
-    <div class="recipe-panel">
-      <h3>📋 Recipes</h3>
-      <div id="recipeCount">No recipes loaded.</div>
-      <div id="recipeList"></div>
+        <div id="currentSpeech">Waiting for speech...</div>
+        <div class="speech-divider"></div>
+          <div class="speech-actions">
+          <div class="control-group">
+            <button id="startListeningBtn" class="btn btn-green" onclick="startListening()">▶ Start</button>
+            <button id="stopListeningBtn" class="btn btn-red" onclick="stopListening()">⏹ Stop</button>
+          </div>
+        </div>
     </div>
   </div>
-
+ </section>
   <script>
     const DEBUG = true;
 
@@ -389,8 +527,16 @@
     let finalTranscript = '';
     let interimTranscript = '';
     let bonoDetected = false;
+    let isExiting = false;
+    let lastRecognitionActivityAt = Date.now();
+    let recoveryInProgress = false;
+    let lastRecoveryAt = 0;
+    let hasStartedFromHeroOnce = false;
+    let heroStartDelayTimer = null;
 
     const SILENCE_THRESHOLD_MS = 3000;
+    const RECOGNITION_STUCK_TIMEOUT_MS = 12000;
+    const RECOVERY_COOLDOWN_MS = 5000;
 
     // ==================== RECIPE RENDERING ====================
 
@@ -427,7 +573,187 @@
     card.onclick = () => renderSelectedRecipe(recipe);
     listEl.appendChild(card);
   });
+} 
+function start_app() {
+  socket.emit('app_started');
+  document.getElementById('heroScreen').style.display = 'none';
+  document.getElementById('mainScreen').style.display = 'block';
+  document.getElementById('mainScreen').scrollIntoView({ behavior: 'smooth' });
+
+  if (heroStartDelayTimer) {
+    clearTimeout(heroStartDelayTimer);
+    heroStartDelayTimer = null;
+  }
+
+  if (!hasStartedFromHeroOnce) {
+    hasStartedFromHeroOnce = true;
+    heroStartDelayTimer = setTimeout(() => {
+      heroStartDelayTimer = null;
+      if (isExiting) return;
+      if (document.getElementById('mainScreen').style.display === 'none') return;
+      startListening();
+    }, 3000);
+    return;
+  }
+
+  startListening();
 }
+
+function back_to_hero() {
+  if (heroStartDelayTimer) {
+    clearTimeout(heroStartDelayTimer);
+    heroStartDelayTimer = null;
+  }
+
+  try {
+    stopListening();
+  } catch (e) {}
+
+      socket.emit('app_stopped');
+  
+  document.getElementById('mainScreen').style.display = 'none';
+  document.getElementById('heroScreen').style.display = 'grid';
+  document.getElementById('heroScreen').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exit_app() {
+  isExiting = true;
+
+  if (heroStartDelayTimer) {
+    clearTimeout(heroStartDelayTimer);
+    heroStartDelayTimer = null;
+  }
+
+  try {
+    stopListening();
+
+    // Prevent client retry loops once user intentionally exits.
+    if (socket && socket.io && socket.io.opts) {
+      socket.io.opts.reconnection = false;
+    }
+
+    let exitSettled = false;
+    const finalizeExit = () => {
+      if (exitSettled) return;
+      exitSettled = true;
+      socket.disconnect();
+      window.close();
+    };
+
+    const fallbackTimer = setTimeout(() => {
+      if (DEBUG) console.warn('Exit ack timeout, closing anyway.');
+      finalizeExit();
+    }, 800);
+
+    socket.emit('exit_app', (ack) => {
+      clearTimeout(fallbackTimer);
+      if (DEBUG) console.log('exit_app ack:', ack);
+      finalizeExit();
+    });
+
+  } catch (e) {console.error('Error during exit:', e); }
+  //window.close();
+  //socket.emit('disconnect');
+}
+
+function renderChatHistory(historyItems) {
+  const historyEl = document.getElementById('chatHistory');
+  const countEl = document.getElementById('chatHistoryCount');
+  const items = Array.isArray(historyItems) ? historyItems : [];
+
+  historyEl.innerHTML = '';
+
+  if (countEl) {
+    countEl.textContent = `${items.length} message${items.length === 1 ? '' : 's'}`;
+  }
+
+  if (items.length === 0) {
+    historyEl.innerHTML = '<div class="chatEmpty">No chat history yet.</div>';
+    return;
+  }
+
+  items.forEach((item, index) => {
+    const entry = document.createElement('div');
+    entry.className = 'chatEntry';
+
+    const role = typeof item === 'string'
+      ? 'message'
+      : (item.role || item.sender || item.type || 'message');
+
+    const content = typeof item === 'string'
+      ? item
+      : (item.content || item.message || item.text || item.transcript || '');
+
+    const time = typeof item === 'object' && item && item.time ? item.time : '';
+
+    entry.innerHTML = `
+      <div class="chatEntryHeader">
+        <span class="chatRole">${String(role)}</span>
+        <span>${time || `#${index + 1}`}</span>
+      </div>
+      <div class="chatContent">${content || '-'}</div>
+    `;
+
+    historyEl.appendChild(entry);
+  });
+}
+
+function sendChatPrompt() {
+  const inputField = document.getElementById('chatInputField');
+  const typedPrompt = inputField.value.trim();
+
+  if (!typedPrompt) return;
+
+  if (DEBUG) console.log(`Sending chat prompt: "${typedPrompt}"`);
+
+  // Emit 'bono' trigger first
+  socket.emit('transcript', { text: 'bono' });
+
+  // Wait a short delay, then emit the actual prompt
+  setTimeout(() => {
+    socket.emit('transcript', { text: typedPrompt });
+    if (DEBUG) console.log(`Emitted chat prompt after delay: "${typedPrompt}"`);
+
+    restartListeningCycle();
+  }, 300);
+
+  // Clear the input field
+  inputField.value = '';
+}
+
+function handleChatInputKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendChatPrompt();
+  }
+}
+
+    function clickListeningButton(buttonId) {
+      const button = document.getElementById(buttonId);
+      if (button) {
+        button.click();
+      }
+    }
+
+    function restartListeningCycle() {
+      if (isExiting || recoveryInProgress) return;
+
+      const now = Date.now();
+      if (now - lastRecoveryAt < RECOVERY_COOLDOWN_MS) return;
+
+      recoveryInProgress = true;
+      lastRecoveryAt = now;
+
+      clickListeningButton('stopListeningBtn');
+      setTimeout(() => {
+        clickListeningButton('startListeningBtn');
+        setTimeout(() => {
+          recoveryInProgress = false;
+          lastRecognitionActivityAt = Date.now();
+        }, 300);
+      }, 150);
+    }
+
    function renderSelectedRecipe(recipe) {
   const listEl = document.getElementById('recipeList');
   listEl.innerHTML = '';
@@ -568,21 +894,6 @@
       }
     }
 
-    function addToSpeechHistory(text) {
-      if (!text || text.trim() === '') return;
-
-      const historyEl = document.getElementById('speechHistory');
-      const entry = document.createElement('div');
-      entry.className = 'speechEntry';
-      const timestamp = new Date().toLocaleTimeString();
-      entry.textContent = `[${timestamp}] ${text}`;
-      historyEl.insertBefore(entry, historyEl.firstChild);
-
-      while (historyEl.children.length > 10) {
-        historyEl.removeChild(historyEl.lastChild);
-      }
-    }
-
     // ==================== SILENCE TIMEOUT ====================
 
     function clearSilenceTimeout() {
@@ -599,7 +910,6 @@
           const fullText = (finalTranscript + interimTranscript).trim();
           if (fullText) {
             socket.emit('transcript', { text: fullText });
-            addToSpeechHistory(fullText);
             if (DEBUG) console.log(`Emitted after silence: "${fullText}"`);
           }
 
@@ -612,16 +922,6 @@
           if (DEBUG) console.log('User stopped speaking');
         }
       }, SILENCE_THRESHOLD_MS);
-    }
-
-    function clearSpeechHistory() {
-      document.getElementById('speechHistory').innerHTML = '';
-      document.getElementById('currentSpeech').textContent = 'Waiting for speech...';
-      finalTranscript = '';
-      interimTranscript = '';
-      clearSilenceTimeout();
-      isSpeaking = false;
-      bonoDetected = false;
     }
 
     // ==================== LISTENING CONTROLS ====================
@@ -657,7 +957,6 @@
       const fullText = (finalTranscript + interimTranscript).trim();
       if (fullText && isSpeaking) {
         socket.emit('transcript', { text: fullText });
-        addToSpeechHistory(fullText);
       }
 
       if (isSpeaking) {
@@ -687,6 +986,7 @@
     recognition.addEventListener('start', () => {
       isListening = true;
       recognitionReady = false;
+      lastRecognitionActivityAt = Date.now();
       updateStatusDisplay();
       if (DEBUG) console.log('Recognition started');
     });
@@ -694,19 +994,18 @@
     recognition.addEventListener('end', () => {
       isListening = false;
       recognitionReady = true;
+      lastRecognitionActivityAt = Date.now();
       updateStatusDisplay();
 
       if (shouldListen) {
-        try {
-          recognition.start();
-        } catch (e) {
-          if (DEBUG) console.log('Auto-restart failed:', e);
-        }
+        restartListeningCycle();
       }
     });
 
     recognition.addEventListener('result', (event) => {
       if (!shouldListen || !isListening) return;
+
+      lastRecognitionActivityAt = Date.now();
 
       interimTranscript = '';
 
@@ -731,7 +1030,6 @@
 
         if (textToEmit) {
           socket.emit('transcript', { text: textToEmit });
-          addToSpeechHistory(textToEmit);
           if (DEBUG) console.log(`Emitted immediately (bono detected): "${textToEmit}"`);
 
           finalTranscript = '';
@@ -757,10 +1055,22 @@
     });
 
     recognition.addEventListener('error', (event) => {
+      lastRecognitionActivityAt = Date.now();
       const errorMsg = `Speech Recognition Error: ${event.error}`;
       socket.emit('log_error', { error: errorMsg });
       if (DEBUG) console.log(errorMsg);
     });
+
+    setInterval(() => {
+      if (isExiting) return;
+      if (!shouldListen || !isListening) return;
+
+      const now = Date.now();
+      if (now - lastRecognitionActivityAt > RECOGNITION_STUCK_TIMEOUT_MS) {
+        if (DEBUG) console.warn('Recognition looks stuck. Triggering recovery cycle.');
+        restartListeningCycle();
+      }
+    }, 1500);
 
     // ==================== SOCKET.IO EVENTS ====================
 
@@ -772,6 +1082,11 @@
     socket.on('selected_recipe', (data) => {
       if (DEBUG) console.log('Selected recipe received:', data);
       renderSelectedRecipe(data?.recipe || null);
+    });
+
+    socket.on('chat_history_update', (data) => {
+      if (DEBUG) console.log('Chat history received:', data);
+      renderChatHistory(data?.history || data?.messages || data?.chat_history || []);
     });
 
     socket.on('set_language', (data) => {
@@ -808,6 +1123,7 @@
     });
 
     socket.on('reconnect', () => {
+      if (isExiting) return;
       updateSpeechDisplay();
       startListening();
     });

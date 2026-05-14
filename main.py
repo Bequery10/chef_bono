@@ -12,8 +12,33 @@ import warnings
 import logging
 from recording_utils.camera import get_frame
 import requests
+from tts_and_stt.flags import is_convo_alive
 
 WEB_API_BASE = "http://127.0.0.1:5001"
+
+
+def serialize_history(chat_history):
+    serialized = []
+    for role, parts in chat_history:
+        serialized.append(
+            {
+                "role": role,
+                "content": " ".join(getattr(part, "text", str(part)) for part in parts),
+            }
+        )
+    return serialized
+
+
+def send_chat_history(chat_history):
+    """Helper function to send chat history to the browser via SocketIO."""
+    try:
+        requests.post(
+            f"{WEB_API_BASE}/control/chat_history",
+            json={"chat_history": chat_history},
+            timeout=2,
+        )
+    except Exception as e:
+        print(f"[WARNING] Failed to send chat history to browser: {e}")
 
 
 def send_recipes_to_browser(recipes):
@@ -72,8 +97,15 @@ if __name__ == "__main__":
             prompt = ""
             while not prompt:
                 prompt = listen(greeting=greeting, language=language)
+                if not prompt:
+                    play(
+                        text="Sorry, I didn't catch that.",
+                        language=language,
+                    )
+                    greeting = False
 
             print(f"User said: '{prompt}'")
+
             greeting = False
             image_path = "recording_utils/current_image.jpg"
             get_frame(path=image_path)
@@ -229,10 +261,18 @@ if __name__ == "__main__":
                     user_input=change,
                     recipe=recipe,
                 )
-                changes_made, main_ingredient, ingredients, preparation, steps = (
-                    response[0]
-                )
-                keep_convo_alive = response[1]
+                keep_convo_alive = response["keep_convo_alive"]
+                response["keep_convo_alive"] = None
+
+                changes_made = response["changes_made"]
+                response["changes_made"] = None
+
+                for key, value in response.items():
+                    if response[key] is not None:
+                        setattr(recipe, key, value)
+
+                send_recipes_to_browser([vars(recipe)])
+
                 play(text=changes_made, language=language)
                 chat._update_chat_history(prompt, changes_made)
 
@@ -241,6 +281,8 @@ if __name__ == "__main__":
                 chat._update_chat_history(prompt, chefs_reponse)
                 play(text=chefs_reponse, language=language)
                 print("program is continuing")
+
+            send_chat_history(serialize_history(chat.chat_history))
 
     except KeyboardInterrupt:
         flask_proc.terminate()

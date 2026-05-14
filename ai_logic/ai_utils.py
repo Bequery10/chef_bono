@@ -179,7 +179,7 @@ class AIUtils:
             print(
                 f"Resource exhausted, please wait {60 - current_time} seconds to continue"
             )
-            time.sleep(60 - current_time)
+            # time.sleep(60 - current_time)
             return True  # retry the function
 
         else:
@@ -1030,7 +1030,7 @@ class AIUtils:
                 You're a virtual chef, named Bono. Keep convos as informative and short as possible.
                 Use json schema to provide your response with the following key:
                 - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
-                - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
                                     Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
                                     Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
                                     Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
@@ -1049,7 +1049,7 @@ class AIUtils:
                     "keep_convo_alive": {
                         "type": "boolean",
                         "description": """
-                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
                         Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
 
                         Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
@@ -1078,7 +1078,7 @@ class AIUtils:
                     "keep_convo_alive": {
                         "type": "boolean",
                         "description": """
-                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
                         Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
 
                         Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
@@ -1114,8 +1114,13 @@ class AIUtils:
                     - ingredients: a strings that contains the ingredients of the recipe.
                     - preparation: a strings that contains the preparation steps of the recipe.
                     - steps: an array of strings that contains the cooking steps of the recipe.
-                    - main_ingredient: a string that contains the main ingredient of the recipe. It should be straightforward and conventional like "chicken", "beef", "cucumber", "potato", etc.
-                    - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                    - Analyze the recipes and for each provide an array of values of a string category: main_ingredient, nationality; boolean categories: 'vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'high_fiber', 'weight_loss/diet', 'muscle_gain/bulking', 'balanced/healthy' and float categories: 'carb_score', 'protein_score', 'fat_score', 'calorie_score', 'sugar_score', 'spice_level_score', 'preparation_time_score', 'preparation_difficulty_score' and for enum category 'meal_class'.
+                    Use the followng guidelines to determine the values:
+                    For the string category 'main_ingredient', provide the primary ingredient used in the recipe. Make sure ingredient name is convential and straightforward like "chicken", "meat", "cucumber", "potato".
+                    For boolean categories, provide 'true' if the recipe fits the category, otherwise provide 'false'.
+                    For float categories, provide a score between 0 and 1 indicating how well the recipe provides the category.
+                  
+                    - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program now.
                                         Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
                                         Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
                                         Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
@@ -1129,10 +1134,39 @@ class AIUtils:
                     "preparation": {"type": "string"},
                     "steps": {"type": "array", "items": {"type": "string"}},
                     "main_ingredient": {"type": "string"},
+                    "vegetarian": {"type": "boolean"},
+                    "vegan": {"type": "boolean"},
+                    "gluten_free": {"type": "boolean"},
+                    "dairy_free": {"type": "boolean"},
+                    "nut_free": {"type": "boolean"},
+                    "high_fiber": {"type": "boolean"},
+                    "weight_loss_diet": {"type": "boolean"},
+                    "muscle_gain_bulking": {"type": "boolean"},
+                    "balanced_healthy": {"type": "boolean"},
+                    "carb_score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "protein_score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "fat_score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "calorie_score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "sugar_score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "spice_level_score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                    },
+                    "preparation_time_score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                    },
+                    "preparation_difficulty_score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                    },
                     "keep_convo_alive": {
                         "type": "boolean",
                         "description": """
-                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session now.
+                        Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
                         Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
 
                         Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
@@ -1147,6 +1181,23 @@ class AIUtils:
                     "preparation",
                     "steps",
                     "main_ingredient",
+                    "vegetarian",
+                    "vegan",
+                    "gluten_free",
+                    "dairy_free",
+                    "nut_free",
+                    "high_fiber",
+                    "weight_loss_diet",
+                    "muscle_gain_bulking",
+                    "balanced_healthy",
+                    "carb_score",
+                    "protein_score",
+                    "fat_score",
+                    "calorie_score",
+                    "sugar_score",
+                    "spice_level_score",
+                    "preparation_time_score",
+                    "preparation_difficulty_score",
                     "keep_convo_alive",
                 ],
             }
@@ -1744,10 +1795,4 @@ class AIUtils:
             print("Failed to get a response from the AI.")
             return None
 
-        return (
-            response["changes_made"],
-            response["main_ingredient"],
-            response["ingredients"],
-            response["preparation"],
-            response["steps"],
-        ), response["keep_convo_alive"]
+        return response

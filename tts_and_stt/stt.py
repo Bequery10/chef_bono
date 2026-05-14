@@ -10,7 +10,12 @@ from tts_and_stt.web_api_app import (
     _emit_set_language,
 )
 from tts_and_stt.tts import play, stop_bono_speaking
-from tts_and_stt.flags import is_bono_speaking, is_user_speaking
+from tts_and_stt.flags import (
+    is_bono_speaking,
+    is_user_speaking,
+    has_app_started,
+    clear_app_started,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -94,6 +99,10 @@ def listen(greeting=False, language="english"):
         print(f"[ERROR] Browser connection failed")
         raise Exception("Browser failed to connect")
 
+    while not has_app_started():
+        time.sleep(0.1)
+        # print("Waiting for app to signal it has started...")
+
     if greeting:
         _emit_set_language(language)
         if language.lower() == "english":
@@ -151,6 +160,8 @@ def start_flask_app(language="english"):
     if DEBUG:
         print("[DEBUG] Cleaned up existing port 5001")
 
+    clear_app_started()
+
     # Kill any existing Chrome processes
     os.system("pkill -f 'Google Chrome' 2>/dev/null || true")
     if DEBUG:
@@ -160,10 +171,14 @@ def start_flask_app(language="english"):
 
     if DEBUG:
         print("[DEBUG] Spawning Flask process...")
+    child_env = os.environ.copy()
+    child_env["BONO_PARENT_PID"] = str(os.getpid())
+
     flask_process = subprocess.Popen(
         ["python", "-m", "tts_and_stt.web_api_app"],
         cwd=".",
         text=True,
+        env=child_env,
     )
     if DEBUG:
         print(f"[DEBUG] Flask process started (PID: {flask_process.pid})")
