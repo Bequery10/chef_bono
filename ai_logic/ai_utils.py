@@ -1030,8 +1030,8 @@ class AIUtils:
                 You're a virtual chef, named Bono. Keep convos as informative and short as possible.
                 Use json schema to provide your response with the following key:
                 - chef's_response: a string that contains the response to the user input. The response should be human friendly and should be based on the user input, chat history, and kitchen image.
-                - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
-                                    Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
+                - keep_convo_alive: Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program now.
+                                    Trigger examples (set False): "stop the program", "end the converstation", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
                                     Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
                                     Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
  
@@ -1050,8 +1050,7 @@ class AIUtils:
                         "type": "boolean",
                         "description": """
                         Set to False ONLY if the user clearly and explicitly wants to end the conversation/session/application/program  now.
-                        Trigger examples (set False): "stop", "end it", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".
-
+                        Trigger examples (set False): "stop the program", "end the converstation", "goodbye", "bye", "that's all", "enough for today", "quit", "exit", "I’m done".          
                         Set to True for anything else, including pauses or temporary interruptions, or when intent is unclear.
                         Keep True examples: "pause", "wait", "hold on", "one second", "not now", "later", "give me a minute", "can you repeat", silence/uncertainty.
 
@@ -1066,6 +1065,7 @@ class AIUtils:
                 You are a virtual chef that helps the user follow the cooking steps and answer questions regarding them based on the selected recipe, user input, chat history, and kitchen image.
                 Here is the recipe information:{generic_parameter[0]}
                 Here are the steps for cooking: {generic_parameter[1]}
+                Do not lie to the user if it looks bad or wrong. You are a virtual chef so you criquites matter more than empathy. 
                 Your responses should be clear, concise, and easy to follow, guiding the user through the cooking process effectively.
             """
 
