@@ -6,6 +6,7 @@ Bono provides instructions, answer questions, communicates via speaker and micro
 
 ### Working demo
 
+https://drive.google.com/file/d/1NRI6AvgXpE9woFvIVuMyPzM96RIrcBeG/view?usp=sharing
 <video src="https://drive.google.com/file/d/1NRI6AvgXpE9woFvIVuMyPzM96RIrcBeG/view?usp=sharing" controls></video>
 
 ---
