@@ -9,4 +9,4 @@ Bono provides instructions, answer questions, communicates via speaker and micro
 
 ---
 
-This is a final project for TED university.
+This is a graduation project for TED university.
